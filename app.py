@@ -24,7 +24,7 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Create progress_logs table with extra columns: subject and rating.
+    # Create progress_logs table with extra columns: subject.
     c.execute("""
         CREATE TABLE IF NOT EXISTS progress_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +32,6 @@ def init_db():
             phase TEXT NOT NULL,
             subject TEXT NOT NULL,
             hours REAL NOT NULL,
-            rating INTEGER,
             notes TEXT
         )
     """)
@@ -194,11 +193,11 @@ init_db()  # Initialize database/tables
 # 2. Database CRUD Helpers
 # -----------------------
 
-def insert_progress_log(date_str, phase, subject, hours, rating, notes):
+def insert_progress_log(date_str, phase, subject, hours, notes):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO progress_logs (date, phase, subject, hours, rating, notes) VALUES (?, ?, ?, ?, ?, ?)",
-              (date_str, phase, subject, hours, rating, notes))
+    c.execute("INSERT INTO progress_logs (date, phase, subject, hours, notes) VALUES (?, ?, ?, ?, ?, ?)",
+              (date_str, phase, subject, hours, notes))
     conn.commit()
     conn.close()
 
@@ -335,12 +334,11 @@ def dashboard_page():
         selected_phase = st.selectbox("Select Phase", phase_options)
         selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
         hours = st.number_input("Hours Studied", min_value=0.0, step=0.5)
-        rating = st.slider("Session Productivity Rating", min_value=1, max_value=10, value=5)
         notes = st.text_area("Notes / Reflection")
         submitted = st.form_submit_button("Log Session")
         if submitted:
             date_str = date.strftime("%Y-%m-%d")
-            insert_progress_log(date_str, selected_phase, selected_subject, hours, rating, notes)
+            insert_progress_log(date_str, selected_phase, selected_subject, hours, notes)
             # Update any existing study goals with the logged hours.
             goals = get_study_goals()
             for goal in goals:
