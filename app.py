@@ -1,13 +1,25 @@
-import datetime
-import json
 import os
-import random
+import json
 import sqlite3
 import time
-
+import datetime
+import requests
+import random
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+# Optional: for PDF and image text extraction
+try:
+    import PyPDF2
+except ImportError:
+    PyPDF2 = None
+try:
+    from PIL import Image
+    import pytesseract
+except ImportError:
+    Image = None
+    pytesseract = None
 
 # ============================
 # 1. Database Setup & Helpers
@@ -24,7 +36,7 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
     
-    # Create progress_logs table with extra columns: subject.
+    # Create progress_logs table
     c.execute("""
         CREATE TABLE IF NOT EXISTS progress_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +47,7 @@ def init_db():
             notes TEXT
         )
     """)
+    # Create schedule table
     c.execute("""
         CREATE TABLE IF NOT EXISTS schedule (
             phase TEXT PRIMARY KEY,
@@ -43,6 +56,7 @@ def init_db():
             schedule_json TEXT
         )
     """)
+    # Create question_bank table (for GateOverflow questions)
     c.execute("""
         CREATE TABLE IF NOT EXISTS question_bank (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,15 +65,17 @@ def init_db():
             answer TEXT
         )
     """)
+    # Create resources table (for uploaded PDFs/images)
     c.execute("""
         CREATE TABLE IF NOT EXISTS resources (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT NOT NULL,
-            title TEXT NOT NULL,
+            subject TEXT,
+            title TEXT,
             link TEXT,
             filename TEXT
         )
     """)
+    # Create study_goals table
     c.execute("""
         CREATE TABLE IF NOT EXISTS study_goals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -68,7 +84,7 @@ def init_db():
             achieved_hours REAL
         )
     """)
-    # Table for revision notes (short notes, formulas)
+    # Create revision_notes table
     c.execute("""
         CREATE TABLE IF NOT EXISTS revision_notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,10 +212,8 @@ init_db()  # Initialize database/tables
 def insert_progress_log(date_str, phase, subject, hours, notes):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute(
-        "INSERT INTO progress_logs (date, phase, subject, hours, notes) VALUES (?, ?, ?, ?, ?)",
-        (date_str, phase, subject, hours, notes)
-    )
+    c.execute("INSERT INTO progress_logs (date, phase, subject, hours, notes) VALUES (?, ?, ?, ?, ?)",
+              (date_str, phase, subject, hours, notes))
     conn.commit()
     conn.close()
 
@@ -285,7 +299,6 @@ def update_goal_achievement(goal_id, additional_hours):
     conn.commit()
     conn.close()
 
-# Revision Notes CRUD
 def insert_revision_note(subject, short_notes, formula):
     conn = get_db_connection()
     c = conn.cursor()
@@ -319,7 +332,58 @@ SUBJECT_LIST = [
 ]
 
 # ------------------------
-# 4. Streamlit App Pages
+# 4. Utility Functions for RAG
+# ------------------------
+
+def extract_text_from_file(file_path):
+    ext = file_path.split('.')[-1].lower()
+    extracted_text = ""
+    if ext == "pdf" and PyPDF2:
+        try:
+            with open(file_path, "rb") as f:
+                reader = PyPDF2.PdfReader(f)
+                for page in reader.pages:
+                    extracted_text += page.extract_text() + "\n"
+        except Exception as e:
+            extracted_text += f"[Error extracting PDF text: {e}]"
+    elif ext in ["png", "jpg", "jpeg"] and Image and pytesseract:
+        try:
+            image = Image.open(file_path)
+            extracted_text = pytesseract.image_to_string(image)
+        except Exception as e:
+            extracted_text += f"[Error extracting image text: {e}]"
+    return extracted_text
+
+def get_rag_context(selected_subject):
+    """Combine text from question bank, revision notes, and resources for a given subject."""
+    context_parts = []
+    # Questions from question bank
+    questions = get_all_questions()
+    subject_questions = [q for q in questions if q["subject"].lower() == selected_subject.lower()]
+    if subject_questions:
+        q_text = "\n".join([f"Q: {q['question']}\nA: {q['answer'] if q['answer'] else 'No answer provided'}" 
+                             for q in subject_questions])
+        context_parts.append("Question Bank:\n" + q_text)
+    
+    # Revision notes
+    notes = get_revision_notes()
+    subject_notes = [n for n in notes if n["subject"].lower() == selected_subject.lower()]
+    if subject_notes:
+        n_text = "\n".join([f"Note: {n['short_notes']}\nFormula: {n['formula']}" for n in subject_notes])
+        context_parts.append("Revision Notes:\n" + n_text)
+    
+    # Resources (uploaded PDFs/images)
+    resources = get_all_resources()
+    subject_resources = [r for r in resources if r["subject"] and r["subject"].lower() == selected_subject.lower() and r["filename"]]
+    for r in subject_resources:
+        extracted = extract_text_from_file(r["filename"])
+        if extracted:
+            context_parts.append(f"Resource ({r['title']}):\n" + extracted)
+    
+    return "\n\n".join(context_parts)
+
+# ------------------------
+# 5. Streamlit App Pages
 # ------------------------
 
 
@@ -327,21 +391,19 @@ def dashboard_page():
     st.title("GATE DA 2026 Dashboard")
     st.subheader("Overview of Your Study Progress")
     
-    
     st.header("Log a Study Session")
     with st.form("study_session_form"):
-        date = st.date_input("Date", datetime.date.today())
-        schedules = get_all_schedules()
-        phase_options = list(schedules.keys())
+        session_date = st.date_input("Date", datetime.date.today())
+        schedules = {}  # You can fetch schedules if needed
+        phase_options = list(get_all_schedules().keys())
         selected_phase = st.selectbox("Select Phase", phase_options)
         selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
         hours = st.number_input("Hours Studied", min_value=0.0, step=0.5)
         notes = st.text_area("Notes / Reflection")
         submitted = st.form_submit_button("Log Session")
         if submitted:
-            date_str = date.strftime("%Y-%m-%d")
+            date_str = session_date.strftime("%Y-%m-%d")
             insert_progress_log(date_str, selected_phase, selected_subject, hours, notes)
-            # Update any existing study goals with the logged hours.
             goals = get_study_goals()
             for goal in goals:
                 update_goal_achievement(goal["id"], hours)
@@ -376,16 +438,12 @@ def analytics_page():
         df_logs['date'] = pd.to_datetime(df_logs['date'])
         df_logs = df_logs.sort_values("date")
         df_logs['cumulative_hours'] = df_logs['hours'].cumsum()
-        
         st.markdown("### Cumulative Hours Over Time")
         st.line_chart(df_logs.set_index("date")["cumulative_hours"])
-        
         st.markdown("### Study Hours by Phase")
         phase_hours = df_logs.groupby("phase")["hours"].sum().reset_index()
         fig_pie = px.pie(phase_hours, names="phase", values="hours", title="Study Hours by Phase")
         st.plotly_chart(fig_pie)
-        
-        # Additional visualization: study hours by weekday.
         df_logs['weekday'] = df_logs['date'].dt.day_name()
         order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         weekday_hours = df_logs.groupby("weekday")["hours"].sum().reindex(order).reset_index()
@@ -398,11 +456,9 @@ def analytics_page():
 def study_planner_page():
     st.title("Study Planner")
     st.subheader("Plan and View Your Schedule for Each Phase")
-    
     schedules = get_all_schedules()
     phase_keys = list(schedules.keys())
     tabs = st.tabs(phase_keys)
-    
     for i, phase in enumerate(phase_keys):
         with tabs[i]:
             phase_info = schedules[phase]
@@ -420,8 +476,7 @@ def study_planner_page():
 
 def revision_hub_page():
     st.title("Revision Hub")
-    st.subheader("Add and Display Short Notes, Formulas, etc. by Subject")
-    
+    st.subheader("Add and Display Short Notes, Formulas, and Upload Files")
     with st.form("revision_notes_form"):
         selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
         short_notes = st.text_area("Short Notes")
@@ -433,18 +488,32 @@ def revision_hub_page():
                 st.success("Revision note added!")
             else:
                 st.error("Please provide at least one of Short Notes or Formula.")
-    
     all_notes = get_revision_notes()
     if all_notes:
         df_notes = pd.DataFrame(all_notes, columns=all_notes[0].keys())
         st.dataframe(df_notes)
     else:
         st.info("No revision notes added yet.")
+    
+    st.markdown("---")
+    st.markdown("### Upload Additional Revision Resources (PDF/Images)")
+    uploaded_file = st.file_uploader("Upload a file", type=["pdf", "docx", "xlsx", "png", "jpg"])
+    if uploaded_file:
+        upload_folder = "uploads"
+        if not os.path.exists(upload_folder):
+            os.makedirs(upload_folder)
+        file_path = os.path.join(upload_folder, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        # Save uploaded file as a resource (subject can be chosen or left NULL)
+        subject_for_resource = st.text_input("Enter subject for this resource (optional)")
+        title = st.text_input("Enter title for this resource (optional)", value=uploaded_file.name)
+        insert_resource(subject_for_resource, title, "", file_path)
+        st.success("Resource uploaded and saved!")
 
 def question_bank_page():
     st.title("Question Bank")
-    st.subheader("Store and Review Important Questions & Patterns by Subject")
-    
+    st.subheader("Store and Review Questions & Patterns by Subject")
     with st.form("question_bank_form"):
         subject = st.text_input("Subject")
         question_text = st.text_area("Question")
@@ -456,7 +525,6 @@ def question_bank_page():
                 st.success("Question added!")
             else:
                 st.error("Please provide both a subject and a question.")
-    
     questions = get_all_questions()
     if questions:
         df_q = pd.DataFrame(questions, columns=questions[0].keys())
@@ -467,7 +535,6 @@ def question_bank_page():
 def resources_page():
     st.title("Resources")
     st.subheader("Store Resource Links and Files")
-    
     with st.form("resources_form"):
         subject = st.text_input("Subject")
         resource_title = st.text_input("Resource Title")
@@ -491,7 +558,6 @@ def resources_page():
                 st.success("Resource added!")
             else:
                 st.error("Please provide the subject, resource title, and at least a link or file.")
-    
     resources = get_all_resources()
     if resources:
         df_res = pd.DataFrame(resources, columns=resources[0].keys())
@@ -502,7 +568,6 @@ def resources_page():
 def study_goals_page():
     st.title("Study Goals")
     st.subheader("Set and Track Your Study Targets")
-    
     with st.form("goals_form"):
         description = st.text_input("Goal Description", "E.g., Study 50 hours in November")
         target_hours = st.number_input("Target Hours", min_value=0.0, step=1.0)
@@ -513,7 +578,6 @@ def study_goals_page():
                 st.success("Study goal added!")
             else:
                 st.error("Please provide a valid goal description and target hours.")
-    
     goals = get_study_goals()
     if goals:
         st.markdown("### Current Study Goals")
@@ -530,14 +594,13 @@ def study_goals_page():
 def calendar_view_page():
     st.title("Calendar View")
     st.subheader("View Your Study Sessions Grouped by Date")
-    
     logs = get_progress_logs()
     if logs:
         df_logs = pd.DataFrame(logs, columns=logs[0].keys())
         df_logs['date'] = pd.to_datetime(df_logs['date'])
         grouped = df_logs.groupby(df_logs['date'].dt.date)
-        for date, group in grouped:
-            with st.expander(f"{date} - {len(group)} session(s)"):
+        for d, group in grouped:
+            with st.expander(f"{d} - {len(group)} session(s)"):
                 st.dataframe(group)
     else:
         st.info("No study sessions logged yet.")
@@ -545,7 +608,6 @@ def calendar_view_page():
 def download_reports_page():
     st.title("Download Reports")
     st.subheader("Download Your Study Sessions Data as CSV")
-    
     logs = get_progress_logs()
     if logs:
         df_logs = pd.DataFrame(logs, columns=logs[0].keys())
@@ -557,7 +619,6 @@ def download_reports_page():
 def focus_timer_page():
     st.title("Focus Timer")
     st.subheader("Start a Pomodoro-Style Focus Timer")
-    
     duration = st.number_input("Set timer duration (minutes)", min_value=1, max_value=60, value=25)
     if st.button("Start Timer"):
         placeholder = st.empty()
@@ -569,9 +630,152 @@ def focus_timer_page():
             time.sleep(1)
         placeholder.markdown("### Time's up!")
 
-# ------------------
-# 5. Main App Navigation
-# ------------------
+# ------------------------
+# New Combined Page: RAG Assistant
+# ------------------------
+
+def rag_assistant_page():
+    st.title("RAG Assistant")
+    st.subheader("Ask for subject/topic questions and revision points – all through a prompt!")
+    
+    # Let the user select a subject (this will filter the retrieval context)
+    selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
+    
+    # Optional: File upload for additional revision resources
+    st.markdown("#### Upload Revision Resources (PDFs/Images)")
+    uploaded_file = st.file_uploader("Upload a file", type=["pdf", "png", "jpg", "jpeg"], key="rag_resource")
+    if uploaded_file:
+        upload_folder = "uploads"
+        if not os.path.exists(upload_folder):
+            os.makedirs(upload_folder)
+        file_path = os.path.join(upload_folder, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        # Optionally prompt for subject/title
+        resource_subject = st.text_input("Enter subject for this resource", value=selected_subject)
+        resource_title = st.text_input("Enter title for this resource", value=uploaded_file.name)
+        insert_resource(resource_subject, resource_title, "", file_path)
+        st.success("Resource uploaded and saved!")
+    
+    # Build retrieval context from question bank, revision notes, and uploaded resources
+    retrieval_context = get_rag_context(selected_subject)
+    
+    # Show the retrieved context for debugging (optional)
+    with st.expander("Show Retrieval Context"):
+        st.text_area("Context", retrieval_context, height=200)
+    
+    # Prompt input for the RAG query
+    user_query = st.text_input("Enter your query (e.g., 'Give me daily revision points for Calculus'):")
+    if user_query:
+        # Build the system prompt combining the retrieval context and the query
+        system_prompt = (
+            "You are an expert revision assistant for the GATE exam. "
+            "Using the following retrieved context (questions, revision notes, and uploaded resource texts) "
+            "provide a detailed answer that includes subject and topic related questions as well as daily revision points. "
+            "Make your answer concise and formatted as a numbered list if applicable.\n\n"
+            "Retrieved Context:\n" + retrieval_context + "\n\n"
+            "User Query: " + user_query
+        )
+        messages = [
+            {"role": "system", "content": system_prompt}
+        ]
+        
+        # Get OpenRouter API key from secrets or environment variable
+        api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            st.error("OpenRouter API key is not set. Please set it in your environment or Streamlit secrets.")
+            return
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": "https://your-dashboard-url.com",  # Replace with your URL if needed
+            "X-Title": "GATE DA 2026 Dashboard"
+        }
+        data = {
+            "model": "meta-llama/llama-3.3-70b-instruct:free",
+            "messages": messages
+        }
+        
+        with st.spinner("Generating response..."):
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions",
+                                     headers=headers, data=json.dumps(data))
+            if response.status_code == 200:
+                result = response.json()
+                rag_reply = result["choices"][0]["message"]["content"]
+                st.markdown("### RAG Assistant Response")
+                st.markdown(rag_reply)
+            else:
+                st.error(f"API Error: {response.text}")
+
+def chat_assistant_page():
+    st.title("Chat Assistant")
+    st.subheader("Talk to your study data assistant using Llama 3.3!")
+    
+    # Initialize session state for chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    # Display previous conversation
+    for msg in st.session_state.chat_history:
+        st.chat_message(msg["role"]).write(msg["content"])
+
+    # User input area
+    user_input = st.chat_input("Enter your message:")
+    if user_input:
+        # Append user's message to history
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        st.chat_message("user").write(user_input)
+        
+        # Optionally, fetch inserted data (e.g. study logs) and convert to text context
+        logs = get_progress_logs()
+        context = ""
+        if logs:
+            df_logs = pd.DataFrame(logs, columns=logs[0].keys())
+            context = df_logs.to_csv(index=False)
+        
+        # Build the message payload including a system prompt that injects context
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful assistant who knows about my study sessions. "
+                    "When relevant, refer to the following study logs to provide tailored insights:\n\n"
+                    f"{context}"
+                )
+            }
+        ]
+        messages.extend(st.session_state.chat_history)
+        
+        # Get the API key from environment or secrets
+        api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            st.error("OpenRouter API key is not set. Please set it in your environment or Streamlit secrets.")
+        else:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": "https://your-dashboard-url.com",  # Replace with your actual URL if desired
+                "X-Title": "Your Dashboard"
+            }
+            data = {
+                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "messages": messages,
+            }
+            # Send request to OpenRouter API
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions",
+                                     headers=headers, data=json.dumps(data))
+            if response.status_code == 200:
+                result = response.json()
+                assistant_reply = result["choices"][0]["message"]["content"]
+                # Append assistant's reply to history
+                st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
+                st.chat_message("assistant").write(assistant_reply)
+            else:
+                st.error(f"API Error: {response.text}")
+
+
+# ------------------------
+# 6. Main App Navigation
+# ------------------------
 
 def main():
     st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
@@ -586,11 +790,13 @@ def main():
         "Study Goals": study_goals_page,
         "Calendar View": calendar_view_page,
         "Download Reports": download_reports_page,
-        "Focus Timer": focus_timer_page
+        "Focus Timer": focus_timer_page,
+        "Chat Assistant": chat_assistant_page,
+        "RAG Assistant": rag_assistant_page  # Combined RAG page
     }
     
     selection = st.sidebar.radio("Navigation", list(pages.keys()))
     pages[selection]()
-    
+
 if __name__ == '__main__':
     main()
