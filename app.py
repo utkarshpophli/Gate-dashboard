@@ -196,8 +196,10 @@ init_db()  # Initialize database/tables
 def insert_progress_log(date_str, phase, subject, hours, notes):
     conn = get_db_connection()
     c = conn.cursor()
-    c.execute("INSERT INTO progress_logs (date, phase, subject, hours, notes) VALUES (?, ?, ?, ?, ?, ?)",
-              (date_str, phase, subject, hours, notes))
+    c.execute(
+        "INSERT INTO progress_logs (date, phase, subject, hours, notes) VALUES (?, ?, ?, ?, ?)",
+        (date_str, phase, subject, hours, notes)
+    )
     conn.commit()
     conn.close()
 
