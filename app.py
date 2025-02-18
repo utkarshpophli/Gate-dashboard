@@ -25,7 +25,7 @@ except ImportError:
 # 1. Database Setup & Helpers
 # ============================
 
-DB_FILE = "gate_da.db"
+DB_FILE = "database.db"
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
