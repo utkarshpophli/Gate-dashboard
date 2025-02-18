@@ -25,7 +25,7 @@ except ImportError:
 # 1. Database Setup & Helpers
 # ============================
 
-DB_FILE = "database.db"
+DB_FILE = "data_hub.db"
 
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
