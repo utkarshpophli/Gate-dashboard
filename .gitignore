@@ -17,6 +17,7 @@ venv/
 ENV/
 env/
 .venv/
+.env
 
 # Ignore system files
 .DS_Store

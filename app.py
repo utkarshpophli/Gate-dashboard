@@ -8,6 +8,9 @@ import random
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Optional: for PDF and image text extraction
 try:
@@ -641,7 +644,7 @@ def rag_assistant_page():
     # Let the user select a subject (this will filter the retrieval context)
     selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
     
-    # Optional: File upload for additional revision resources
+    # Optional: File upload for additional revision resources (PDFs/Images)
     st.markdown("#### Upload Revision Resources (PDFs/Images)")
     uploaded_file = st.file_uploader("Upload a file", type=["pdf", "png", "jpg", "jpeg"], key="rag_resource")
     if uploaded_file:
@@ -680,7 +683,7 @@ def rag_assistant_page():
             {"role": "system", "content": system_prompt}
         ]
         
-        # Get OpenRouter API key from secrets or environment variable
+        # Get API key from Streamlit secrets or environment variable
         api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             st.error("OpenRouter API key is not set. Please set it in your environment or Streamlit secrets.")
@@ -692,7 +695,7 @@ def rag_assistant_page():
             "X-Title": "GATE DA 2026 Dashboard"
         }
         data = {
-            "model": "meta-llama/llama-3.3-70b-instruct:free",
+            "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
             "messages": messages
         }
         
@@ -709,7 +712,7 @@ def rag_assistant_page():
 
 def chat_assistant_page():
     st.title("Chat Assistant")
-    st.subheader("Talk to your study data assistant using Llama 3.3!")
+    st.subheader("Talk to your study data assistant using Google Gemini Flash Lite!")
     
     # Initialize session state for chat history
     if "chat_history" not in st.session_state:
@@ -726,7 +729,7 @@ def chat_assistant_page():
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.chat_message("user").write(user_input)
         
-        # Optionally, fetch inserted data (e.g. study logs) and convert to text context
+        # Optionally, fetch study logs and convert to text context
         logs = get_progress_logs()
         context = ""
         if logs:
@@ -753,11 +756,10 @@ def chat_assistant_page():
         else:
             headers = {
                 "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "https://gate-dashboard-2nbnbydr3yirypmiufc539.streamlit.app/",  # Replace with your actual URL if desired
                 "X-Title": "Your Dashboard"
             }
             data = {
-                "model": "meta-llama/llama-3.3-70b-instruct:free",
+                "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
                 "messages": messages,
             }
             # Send request to OpenRouter API
