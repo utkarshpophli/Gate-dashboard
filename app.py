@@ -753,7 +753,7 @@ def chat_assistant_page():
         else:
             headers = {
                 "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "https://your-dashboard-url.com",  # Replace with your actual URL if desired
+                "HTTP-Referer": "https://gate-dashboard-2nbnbydr3yirypmiufc539.streamlit.app/",  # Replace with your actual URL if desired
                 "X-Title": "Your Dashboard"
             }
             data = {
