@@ -1,9 +1,6 @@
 # Ignore environment variables
 .env
 
-# Ignore Streamlit secrets
-.streamlit/secrets.toml
-
 # Ignore Python bytecode
 __pycache__/
 *.py[cod]
