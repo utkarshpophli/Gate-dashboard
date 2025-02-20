@@ -870,7 +870,7 @@ def chat_assistant_page():
                     messages=messages,
                     temperature=1.0,
                     top_p=1.0,
-                    # max_tokens=1000,
+                    max_tokens=1000,
                     model=model_name
                 )
                 assistant_reply = response.choices[0].message.content
@@ -878,6 +878,7 @@ def chat_assistant_page():
                 st.chat_message("assistant").write(assistant_reply)
             except Exception as e:
                 st.error(f"Error generating response: {e}")
+
 
 # ------------------------
 # 6. Main App Navigation
