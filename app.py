@@ -772,7 +772,7 @@ def rag_assistant_page():
     # Optional: File upload for additional revision resources (PDF/Image)
     st.markdown("#### Upload Revision Resource (PDF or Image)")
     uploaded_file = st.file_uploader("Upload a file", type=["pdf", "png", "jpg", "jpeg"], key="rag_resource")
-    additional_messages = []  # Extra messages to send along with the prompt
+    additional_messages = []  # List to hold any extra messages for the model
     
     if uploaded_file:
         upload_folder = "uploads"
@@ -786,6 +786,7 @@ def rag_assistant_page():
         ext = uploaded_file.name.split('.')[-1].lower()
         if ext in ["png", "jpg", "jpeg"]:
             try:
+                # Create an image message using Azure AI Inference's types
                 image_url = ImageUrl.load(
                     image_file=file_path,
                     image_format=ext,
@@ -795,9 +796,12 @@ def rag_assistant_page():
             except Exception as e:
                 st.error(f"Error processing image: {e}")
         elif ext == "pdf":
+            # Attempt to extract text using your OCR function
             extracted_text = extract_text_from_file(file_path)
+            # Define a list of keywords expected for relevance (e.g., for Linear Algebra)
             expected_keywords = ['linear algebra', 'matrix', 'vector', 'eigen']
             if not any(keyword in extracted_text.lower() for keyword in expected_keywords):
+                # If text extraction is insufficient, instruct the model to use its vision model
                 additional_messages.append(
                     UserMessage("The extracted text from the PDF is insufficient or not relevant. Please apply your vision model to analyze the document visually and extract key data (such as diagrams, tables, or section headings) that are pertinent to the subject.")
                 )
@@ -806,10 +810,10 @@ def rag_assistant_page():
                     UserMessage(f"Extracted text from PDF: {extracted_text}")
                 )
     
-    # Build retrieval context from your database
+    # Build retrieval context from your database (e.g., revision notes, Q&A, etc.)
     retrieval_context = get_rag_context(selected_subject)
     
-    # Construct the prompt
+    # Build the prompt message combining retrieval context and user query placeholder
     prompt_text = (
         f"You are an expert revision assistant for the GATE exam.\n"
         f"Subject: {selected_subject}\n"
@@ -819,6 +823,7 @@ def rag_assistant_page():
     user_query = st.text_input("Enter your query (e.g., 'Give me daily revision points for Calculus'):")
     
     if user_query:
+        # Prepare the message sequence to send to the model
         messages = [
             SystemMessage(prompt_text),
             UserMessage(user_query)
@@ -826,12 +831,13 @@ def rag_assistant_page():
         if additional_messages:
             messages.extend(additional_messages)
         
+        # Retrieve your GitHub token (PAT) from the environment
         token = get_and_verify_token()
         if not token:
-            st.error("Please provide a valid GitHub token to proceed.")
+            st.error("GitHub token not found in environment variables.")
             return
         
-        # Configure the client for the RAG model
+        # Configure the client for the RAG model (Llama-3.2-90B-Vision-Instruct)
         endpoint = "https://models.inference.ai.azure.com"
         model_name = "Llama-3.2-90B-Vision-Instruct"
         
