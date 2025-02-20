@@ -724,6 +724,45 @@ def focus_timer_page():
 # New Combined Page: RAG Assistant
 # ------------------------
 
+def get_and_verify_token():
+    """
+    Prompts the user to enter a GitHub token.
+    Verifies the token by sending a minimal test request using a lightweight model.
+    If verified, stores it in session_state and returns the token.
+    """
+    # If a token is already stored in session state, use it.
+    if "token" in st.session_state and st.session_state.token:
+        return st.session_state.token
+
+    token_input = st.text_input("Enter your GitHub Token:", type="password")
+    if token_input:
+        with st.spinner("Verifying token..."):
+            try:
+                # Use a lightweight model (o3-mini) for a simple test
+                test_client = ChatCompletionsClient(
+                    endpoint="https://models.inference.ai.azure.com",
+                    credential=AzureKeyCredential(token_input),
+                    api_version="2024-12-01-preview"
+                )
+                test_response = test_client.complete(
+                    messages=[
+                        SystemMessage("Token verification test."),
+                        UserMessage("Ping")
+                    ],
+                    temperature=1.0,
+                    top_p=1.0,
+                    max_tokens=10,
+                    model="o3-mini"
+                )
+                # If no exception, token is valid.
+                st.success("Token verified successfully!")
+                st.session_state.token = token_input
+                return token_input
+            except Exception as e:
+                st.error(f"Token verification failed: {e}")
+                return None
+    return None
+
 def rag_assistant_page():
     st.title("RAG Assistant")
     st.subheader("Ask for subject/topic questions and revision points – all through a prompt!")
@@ -734,7 +773,7 @@ def rag_assistant_page():
     # Optional: File upload for additional revision resources (PDF/Image)
     st.markdown("#### Upload Revision Resource (PDF or Image)")
     uploaded_file = st.file_uploader("Upload a file", type=["pdf", "png", "jpg", "jpeg"], key="rag_resource")
-    additional_messages = []  # List to hold any extra messages for the model
+    additional_messages = []  # Extra messages to send along with the prompt
     
     if uploaded_file:
         upload_folder = "uploads"
@@ -748,7 +787,6 @@ def rag_assistant_page():
         ext = uploaded_file.name.split('.')[-1].lower()
         if ext in ["png", "jpg", "jpeg"]:
             try:
-                # Create an image message using Azure AI Inference's types
                 image_url = ImageUrl.load(
                     image_file=file_path,
                     image_format=ext,
@@ -758,12 +796,9 @@ def rag_assistant_page():
             except Exception as e:
                 st.error(f"Error processing image: {e}")
         elif ext == "pdf":
-            # Attempt to extract text using your OCR function
             extracted_text = extract_text_from_file(file_path)
-            # Define a list of keywords expected for relevance (e.g., for Linear Algebra)
             expected_keywords = ['linear algebra', 'matrix', 'vector', 'eigen']
             if not any(keyword in extracted_text.lower() for keyword in expected_keywords):
-                # If text extraction is insufficient, instruct the model to use its vision model
                 additional_messages.append(
                     UserMessage("The extracted text from the PDF is insufficient or not relevant. Please apply your vision model to analyze the document visually and extract key data (such as diagrams, tables, or section headings) that are pertinent to the subject.")
                 )
@@ -772,10 +807,10 @@ def rag_assistant_page():
                     UserMessage(f"Extracted text from PDF: {extracted_text}")
                 )
     
-    # Build retrieval context from your database (e.g., revision notes, Q&A, etc.)
+    # Build retrieval context from your database
     retrieval_context = get_rag_context(selected_subject)
     
-    # Build the prompt message combining retrieval context and user query placeholder
+    # Construct the prompt
     prompt_text = (
         f"You are an expert revision assistant for the GATE exam.\n"
         f"Subject: {selected_subject}\n"
@@ -785,7 +820,6 @@ def rag_assistant_page():
     user_query = st.text_input("Enter your query (e.g., 'Give me daily revision points for Calculus'):")
     
     if user_query:
-        # Prepare the message sequence to send to the model
         messages = [
             SystemMessage(prompt_text),
             UserMessage(user_query)
@@ -793,13 +827,12 @@ def rag_assistant_page():
         if additional_messages:
             messages.extend(additional_messages)
         
-        # Retrieve your GitHub token (PAT) from the environment
-        token = os.environ.get("GITHUB_TOKEN")
+        token = get_and_verify_token()
         if not token:
-            st.error("GitHub token not found in environment variables.")
+            st.error("Please provide a valid GitHub token to proceed.")
             return
         
-        # Configure the client for the RAG model (Llama-3.2-90B-Vision-Instruct)
+        # Configure the client for the RAG model
         endpoint = "https://models.inference.ai.azure.com"
         model_name = "Llama-3.2-90B-Vision-Instruct"
         
@@ -828,11 +861,16 @@ def chat_assistant_page():
     st.title("Chat Assistant")
     st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
     
-    # Initialize chat history if not present
+    # Token input/verification for chat
+    token = get_and_verify_token()
+    if not token:
+        st.warning("Please enter and verify your GitHub token above to start chatting.")
+        return
+    
+    # Initialize or display chat history
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
-    # Display previous conversation
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).write(msg["content"])
     
@@ -841,18 +879,13 @@ def chat_assistant_page():
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.chat_message("user").write(user_input)
         
-        # Build messages for the conversation (include system prompt and history)
+        # Build conversation messages (system prompt + history)
         messages = [SystemMessage("You are a helpful assistant who knows about my study sessions.")]
         for entry in st.session_state.chat_history:
             if entry["role"] == "user":
                 messages.append(UserMessage(entry["content"]))
             else:
                 messages.append(AssistantMessage(entry["content"]))
-        
-        token = os.environ.get("GITHUB_TOKEN")
-        if not token:
-            st.error("GitHub token not found in environment variables.")
-            return
         
         # Configure the client for the chat model (o3-mini)
         endpoint = "https://models.inference.ai.azure.com"
