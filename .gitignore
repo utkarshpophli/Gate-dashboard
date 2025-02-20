@@ -1,5 +1,5 @@
 # Ignore environment variables
-# .env
+.env
 
 # Ignore Python bytecode
 __pycache__/
@@ -9,6 +9,14 @@ __pycache__/
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
+.streamlit/secrets.toml
+
+# Ignore virtual environments
+venv/
+ENV/
+env/
+.venv/
+.env
 
 # Ignore system files
 .DS_Store

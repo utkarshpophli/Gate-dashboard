@@ -751,7 +751,6 @@ def get_and_verify_token():
                     ],
                     temperature=1.0,
                     top_p=1.0,
-                    max_tokens=10,
                     model="o3-mini"
                 )
                 # If no exception, token is valid.
@@ -848,7 +847,6 @@ def rag_assistant_page():
                     messages=messages,
                     temperature=1.0,
                     top_p=1.0,
-                    max_tokens=1000,
                     model=model_name
                 )
                 rag_reply = response.choices[0].message.content
@@ -903,7 +901,6 @@ def chat_assistant_page():
                     messages=messages,
                     temperature=1.0,
                     top_p=1.0,
-                    max_tokens=1000,
                     model=model_name
                 )
                 assistant_reply = response.choices[0].message.content
