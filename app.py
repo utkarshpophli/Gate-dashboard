@@ -9,6 +9,17 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from dotenv import load_dotenv
+from azure.ai.inference import ChatCompletionsClient
+from azure.ai.inference.models import (
+    SystemMessage, 
+    UserMessage, 
+    AssistantMessage, 
+    TextContentItem,
+    ImageContentItem,
+    ImageUrl,
+    ImageDetailLevel
+)
+from azure.core.credentials import AzureKeyCredential
 
 load_dotenv()
 
@@ -397,7 +408,6 @@ def dashboard_page():
     st.header("Log a Study Session")
     with st.form("study_session_form"):
         session_date = st.date_input("Date", datetime.date.today())
-        schedules = {}  # You can fetch schedules if needed
         phase_options = list(get_all_schedules().keys())
         selected_phase = st.selectbox("Select Phase", phase_options)
         selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
@@ -425,36 +435,113 @@ def dashboard_page():
         df_logs = pd.DataFrame(logs, columns=logs[0].keys())
         total_hours = df_logs["hours"].sum()
         st.write(f"**Total Hours Studied:** {total_hours} hours")
+
+        # Existing phase summary
         phase_hours = df_logs.groupby("phase")["hours"].sum().reset_index()
-        st.write("**Hours per Phase:**")
         st.table(phase_hours)
+
+        # NEW: Subject Summary Table
+        df_logs["date"] = pd.to_datetime(df_logs["date"])
+        subject_summary = df_logs.groupby("subject").agg(
+            total_hours=("hours", "sum"),
+            days_studied=("date", "nunique"),
+            start_date=("date", "min"),
+            end_date=("date", "max")
+        ).reset_index()
+        # Calculate total duration for each subject
+        subject_summary["duration_days"] = (
+            subject_summary["end_date"] - subject_summary["start_date"]
+        ).dt.days + 1
+
+        st.header("Subject Summary:")
+        st.dataframe(subject_summary)
+
     else:
         st.write("Log your study sessions to see progress summary.")
 
 def analytics_page():
     st.title("Progress Analytics")
-    st.subheader("Visualize Your Study Progress Over Time")
+    st.subheader("Visualize Your Study Progress with Different Analyses")
     
     logs = get_progress_logs()
-    if logs:
-        df_logs = pd.DataFrame(logs, columns=logs[0].keys())
-        df_logs['date'] = pd.to_datetime(df_logs['date'])
-        df_logs = df_logs.sort_values("date")
-        df_logs['cumulative_hours'] = df_logs['hours'].cumsum()
+    if not logs:
+        st.info("No study session data available for analytics.")
+        return
+    
+    # Convert logs to DataFrame and sort by date
+    df_logs = pd.DataFrame(logs, columns=logs[0].keys())
+    df_logs["date"] = pd.to_datetime(df_logs["date"])
+    df_logs.sort_values("date", inplace=True)
+
+    # Create a dropdown to select the type of analysis
+    analysis_options = ["Overall Progress", "By Subject", "By Week", "By Month", "By Phase"]
+    selected_analysis = st.selectbox("Select Analysis Type", analysis_options)
+
+    if selected_analysis == "Overall Progress":
         st.markdown("### Cumulative Hours Over Time")
+        df_logs["cumulative_hours"] = df_logs["hours"].cumsum()
         st.line_chart(df_logs.set_index("date")["cumulative_hours"])
-        st.markdown("### Study Hours by Phase")
-        phase_hours = df_logs.groupby("phase")["hours"].sum().reset_index()
-        fig_pie = px.pie(phase_hours, names="phase", values="hours", title="Study Hours by Phase")
-        st.plotly_chart(fig_pie)
-        df_logs['weekday'] = df_logs['date'].dt.day_name()
+
+        st.markdown("### Study Hours by Weekday")
+        df_logs["weekday"] = df_logs["date"].dt.day_name()
         order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         weekday_hours = df_logs.groupby("weekday")["hours"].sum().reindex(order).reset_index()
-        st.markdown("### Study Hours by Weekday")
-        fig_bar = px.bar(weekday_hours, x="weekday", y="hours", title="Hours Studied per Weekday")
+        fig_bar = px.bar(
+            weekday_hours,
+            x="weekday",
+            y="hours",
+            title="Hours Studied per Weekday"
+        )
         st.plotly_chart(fig_bar)
-    else:
-        st.info("No study session data available for analytics.")
+
+    elif selected_analysis == "By Subject":
+        st.markdown("### Study Hours by Subject")
+        subject_hours = df_logs.groupby("subject")["hours"].sum().reset_index()
+        fig_subj = px.bar(
+            subject_hours,
+            x="subject",
+            y="hours",
+            title="Hours Studied by Subject"
+        )
+        st.plotly_chart(fig_subj)
+
+    elif selected_analysis == "By Week":
+        st.markdown("### Study Hours by Week (ISO Week Number)")
+        df_logs["week"] = df_logs["date"].dt.isocalendar().week
+        weekly_hours = df_logs.groupby("week")["hours"].sum().reset_index()
+        fig_week = px.line(
+            weekly_hours,
+            x="week",
+            y="hours",
+            title="Hours Studied by Week"
+        )
+        st.plotly_chart(fig_week)
+
+    elif selected_analysis == "By Month":
+        st.markdown("### Study Hours by Month")
+        # Convert date to a monthly period (YYYY-MM)
+        df_logs["month"] = df_logs["date"].dt.to_period("M")
+        monthly_hours = df_logs.groupby("month")["hours"].sum().reset_index()
+        # Convert period to string for plotting
+        monthly_hours["month"] = monthly_hours["month"].astype(str)
+        fig_month = px.bar(
+            monthly_hours,
+            x="month",
+            y="hours",
+            title="Hours Studied by Month"
+        )
+        st.plotly_chart(fig_month)
+
+    elif selected_analysis == "By Phase":
+        st.markdown("### Study Hours by Phase")
+        phase_hours = df_logs.groupby("phase")["hours"].sum().reset_index()
+        fig_pie = px.pie(
+            phase_hours,
+            names="phase",
+            values="hours",
+            title="Study Hours by Phase"
+        )
+        st.plotly_chart(fig_pie)
 
 def study_planner_page():
     st.title("Study Planner")
@@ -641,12 +728,14 @@ def rag_assistant_page():
     st.title("RAG Assistant")
     st.subheader("Ask for subject/topic questions and revision points – all through a prompt!")
     
-    # Let the user select a subject (this will filter the retrieval context)
+    # Let the user select a subject
     selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
     
-    # Optional: File upload for additional revision resources (PDFs/Images)
-    st.markdown("#### Upload Revision Resources (PDFs/Images)")
+    # Optional: File upload for additional revision resources (PDF/Image)
+    st.markdown("#### Upload Revision Resource (PDF or Image)")
     uploaded_file = st.file_uploader("Upload a file", type=["pdf", "png", "jpg", "jpeg"], key="rag_resource")
+    additional_messages = []  # List to hold any extra messages for the model
+    
     if uploaded_file:
         upload_folder = "uploads"
         if not os.path.exists(upload_folder):
@@ -654,126 +743,141 @@ def rag_assistant_page():
         file_path = os.path.join(upload_folder, uploaded_file.name)
         with open(file_path, "wb") as f:
             f.write(uploaded_file.getbuffer())
-        # Optionally prompt for subject/title
-        resource_subject = st.text_input("Enter subject for this resource", value=selected_subject)
-        resource_title = st.text_input("Enter title for this resource", value=uploaded_file.name)
-        insert_resource(resource_subject, resource_title, "", file_path)
-        st.success("Resource uploaded and saved!")
+        st.success("Resource uploaded!")
+        
+        ext = uploaded_file.name.split('.')[-1].lower()
+        if ext in ["png", "jpg", "jpeg"]:
+            try:
+                # Create an image message using Azure AI Inference's types
+                image_url = ImageUrl.load(
+                    image_file=file_path,
+                    image_format=ext,
+                    detail=ImageDetailLevel.LOW
+                )
+                additional_messages.append(ImageContentItem(image_url=image_url))
+            except Exception as e:
+                st.error(f"Error processing image: {e}")
+        elif ext == "pdf":
+            # Attempt to extract text using your OCR function
+            extracted_text = extract_text_from_file(file_path)
+            # Define a list of keywords expected for relevance (e.g., for Linear Algebra)
+            expected_keywords = ['linear algebra', 'matrix', 'vector', 'eigen']
+            if not any(keyword in extracted_text.lower() for keyword in expected_keywords):
+                # If text extraction is insufficient, instruct the model to use its vision model
+                additional_messages.append(
+                    UserMessage("The extracted text from the PDF is insufficient or not relevant. Please apply your vision model to analyze the document visually and extract key data (such as diagrams, tables, or section headings) that are pertinent to the subject.")
+                )
+            else:
+                additional_messages.append(
+                    UserMessage(f"Extracted text from PDF: {extracted_text}")
+                )
     
-    # Build retrieval context from question bank, revision notes, and uploaded resources
+    # Build retrieval context from your database (e.g., revision notes, Q&A, etc.)
     retrieval_context = get_rag_context(selected_subject)
     
-    # Show the retrieved context for debugging (optional)
-    with st.expander("Show Retrieval Context"):
-        st.text_area("Context", retrieval_context, height=200)
-    
-    # Prompt input for the RAG query
+    # Build the prompt message combining retrieval context and user query placeholder
+    prompt_text = (
+        f"You are an expert revision assistant for the GATE exam.\n"
+        f"Subject: {selected_subject}\n"
+        f"Retrieved Context:\n{retrieval_context}\n"
+        f"User Query: "
+    )
     user_query = st.text_input("Enter your query (e.g., 'Give me daily revision points for Calculus'):")
+    
     if user_query:
-        # Build the system prompt combining the retrieval context and the query
-        system_prompt = (
-            "You are an expert revision assistant for the GATE exam. "
-            "Using the following retrieved context (questions, revision notes, and uploaded resource texts) "
-            "provide a detailed answer that includes subject and topic related questions as well as daily revision points. "
-            "Make your answer concise and formatted as a numbered list if applicable.\n\n"
-            "Retrieved Context:\n" + retrieval_context + "\n\n"
-            "User Query: " + user_query
-        )
+        # Prepare the message sequence to send to the model
         messages = [
-            {"role": "system", "content": system_prompt}
+            SystemMessage(prompt_text),
+            UserMessage(user_query)
         ]
+        if additional_messages:
+            messages.extend(additional_messages)
         
-        # Get API key from Streamlit secrets or environment variable
-        api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
-        if not api_key:
-            st.error("OpenRouter API key is not set. Please set it in your environment or Streamlit secrets.")
+        # Retrieve your GitHub token (PAT) from the environment
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            st.error("GitHub token not found in environment variables.")
             return
         
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "HTTP-Referer": "https://your-dashboard-url.com",  # Replace with your URL if needed
-            "X-Title": "GATE DA 2026 Dashboard"
-        }
-        data = {
-            "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
-            "messages": messages
-        }
+        # Configure the client for the RAG model (Llama-3.2-90B-Vision-Instruct)
+        endpoint = "https://models.inference.ai.azure.com"
+        model_name = "Llama-3.2-90B-Vision-Instruct"
+        
+        client = ChatCompletionsClient(
+            endpoint=endpoint,
+            credential=AzureKeyCredential(token),
+            api_version="2024-12-01-preview"
+        )
         
         with st.spinner("Generating response..."):
-            response = requests.post("https://openrouter.ai/api/v1/chat/completions",
-                                     headers=headers, data=json.dumps(data))
-            if response.status_code == 200:
-                result = response.json()
-                rag_reply = result["choices"][0]["message"]["content"]
+            try:
+                response = client.complete(
+                    messages=messages,
+                    temperature=1.0,
+                    top_p=1.0,
+                    max_tokens=1000,
+                    model=model_name
+                )
+                rag_reply = response.choices[0].message.content
                 st.markdown("### RAG Assistant Response")
                 st.markdown(rag_reply)
-            else:
-                st.error(f"API Error: {response.text}")
+            except Exception as e:
+                st.error(f"Error generating response: {e}")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
-    st.subheader("Talk to your study data assistant using Google Gemini Flash Lite!")
+    st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
     
-    # Initialize session state for chat history
+    # Initialize chat history if not present
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-
+    
     # Display previous conversation
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).write(msg["content"])
-
-    # User input area
+    
     user_input = st.chat_input("Enter your message:")
     if user_input:
-        # Append user's message to history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.chat_message("user").write(user_input)
         
-        # Optionally, fetch study logs and convert to text context
-        logs = get_progress_logs()
-        context = ""
-        if logs:
-            df_logs = pd.DataFrame(logs, columns=logs[0].keys())
-            context = df_logs.to_csv(index=False)
+        # Build messages for the conversation (include system prompt and history)
+        messages = [SystemMessage("You are a helpful assistant who knows about my study sessions.")]
+        for entry in st.session_state.chat_history:
+            if entry["role"] == "user":
+                messages.append(UserMessage(entry["content"]))
+            else:
+                messages.append(AssistantMessage(entry["content"]))
         
-        # Build the message payload including a system prompt that injects context
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a helpful assistant who knows about my study sessions. "
-                    "When relevant, refer to the following study logs to provide tailored insights:\n\n"
-                    f"{context}"
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            st.error("GitHub token not found in environment variables.")
+            return
+        
+        # Configure the client for the chat model (o3-mini)
+        endpoint = "https://models.inference.ai.azure.com"
+        model_name = "o3-mini"
+        
+        client = ChatCompletionsClient(
+            endpoint=endpoint,
+            credential=AzureKeyCredential(token),
+            api_version="2024-12-01-preview"
+        )
+        
+        with st.spinner("Generating response..."):
+            try:
+                response = client.complete(
+                    messages=messages,
+                    temperature=1.0,
+                    top_p=1.0,
+                    # max_tokens=1000,
+                    model=model_name
                 )
-            }
-        ]
-        messages.extend(st.session_state.chat_history)
-        
-        # Get the API key from environment or secrets
-        api_key = st.secrets.get("OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY")
-        if not api_key:
-            st.error("OpenRouter API key is not set. Please set it in your environment or Streamlit secrets.")
-        else:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "X-Title": "Your Dashboard"
-            }
-            data = {
-                "model": "google/gemini-2.0-flash-lite-preview-02-05:free",
-                "messages": messages,
-            }
-            # Send request to OpenRouter API
-            response = requests.post("https://openrouter.ai/api/v1/chat/completions",
-                                     headers=headers, data=json.dumps(data))
-            if response.status_code == 200:
-                result = response.json()
-                assistant_reply = result["choices"][0]["message"]["content"]
-                # Append assistant's reply to history
+                assistant_reply = response.choices[0].message.content
                 st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
                 st.chat_message("assistant").write(assistant_reply)
-            else:
-                st.error(f"API Error: {response.text}")
-
+            except Exception as e:
+                st.error(f"Error generating response: {e}")
 
 # ------------------------
 # 6. Main App Navigation
