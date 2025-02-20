@@ -9,7 +9,6 @@ __pycache__/
 # Ignore Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
-.streamlit/secrets.toml
 
 # Ignore system files
 .DS_Store
