@@ -11,13 +11,6 @@ __pycache__/
 
 .streamlit/secrets.toml
 
-# Ignore virtual environments
-venv/
-ENV/
-env/
-.venv/
-.env
-
 # Ignore system files
 .DS_Store
 Thumbs.db
