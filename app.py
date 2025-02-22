@@ -52,10 +52,11 @@ except ImportError:
 def get_db_connection():
     """
     Creates and returns a connection to your Supabase PostgreSQL database.
-    The connection string should be stored in your Streamlit secrets as DATABASE_URL.
+    Ensure your DATABASE_URL in your Streamlit secrets is formatted like:
+      postgresql://username:password@host:port/dbname
     """
-    DATABASE_URL = st.secrets["SUPABASE_URL"]
-    engine = sqlalchemy.create_engine(DATABASE_URL)
+    DATABASE_URL = st.secrets["DATABASE_URL"]
+    engine = create_engine(DATABASE_URL)
     return engine.connect()
 
 CREATE_TABLES_SQL = """
@@ -111,13 +112,11 @@ CREATE TABLE IF NOT EXISTS revision_notes (
 );
 """
 
-
 def init_db():
-    """Initializes the Supabase database by creating tables if they do not exist,
-    and inserts default schedule data (default phases) if not already present."""
+    """Initializes the Supabase database by creating tables and inserting default schedule data."""
     try:
         conn = get_db_connection()
-        # Create all tables
+        # Create tables
         conn.execute(text(CREATE_TABLES_SQL))
         
         # Default schedule data (default phases)
@@ -218,9 +217,10 @@ def init_db():
     }
         
         # Insert default schedule data if not already present
+         # Insert default schedule data if not present
         for phase, details in default_phases.items():
             result = conn.execute(text("SELECT COUNT(*) FROM schedule WHERE phase = :phase"), {"phase": phase})
-            count = result.scalar()  # Returns the count as a scalar value
+            count = result.scalar()  # Get the count as an integer
             if count == 0:
                 conn.execute(
                     text("""
@@ -239,7 +239,6 @@ def init_db():
         st.success("Database initialized successfully! Tables and default phases created (if not already present).")
     except Exception as e:
         st.error(f"Error initializing database: {e}")
-
 # Initialize the database when the app starts
 init_db()
         
@@ -598,7 +597,6 @@ def get_rag_context(selected_subject):
 def dashboard_page():
     st.title("GATE DA 2026 Dashboard")
     st.subheader("Overview of Your Study Progress")
-    
     st.header("Log a Study Session")
     with st.form("study_session_form"):
         session_date = st.date_input("Date", datetime.date.today())
@@ -615,44 +613,13 @@ def dashboard_page():
             for goal in goals:
                 update_goal_achievement(goal["id"], hours)
             st.success("Study session logged!")
-    
     st.header("Study Sessions Log")
     logs = get_progress_logs()
     if logs:
-        df_logs = pd.DataFrame(logs, columns=logs[0].keys())
+        df_logs = pd.DataFrame(logs)
         st.dataframe(df_logs)
     else:
         st.info("No study sessions logged yet.")
-    
-    st.header("Progress Summary")
-    if logs:
-        df_logs = pd.DataFrame(logs, columns=logs[0].keys())
-        total_hours = df_logs["hours"].sum()
-        st.write(f"**Total Hours Studied:** {total_hours} hours")
-
-        # Existing phase summary
-        phase_hours = df_logs.groupby("phase")["hours"].sum().reset_index()
-        st.table(phase_hours)
-
-        # NEW: Subject Summary Table
-        df_logs["date"] = pd.to_datetime(df_logs["date"])
-        subject_summary = df_logs.groupby("subject").agg(
-            total_hours=("hours", "sum"),
-            days_studied=("date", "nunique"),
-            start_date=("date", "min"),
-            end_date=("date", "max")
-        ).reset_index()
-        # Calculate total duration for each subject
-        subject_summary["duration_days"] = (
-            subject_summary["end_date"] - subject_summary["start_date"]
-        ).dt.days + 1
-
-        st.header("Subject Summary:")
-        st.dataframe(subject_summary)
-
-    else:
-        st.write("Log your study sessions to see progress summary.")
-
 def analytics_page():
     st.title("Progress Analytics")
     st.subheader("Visualize Your Study Progress with Different Analyses")
