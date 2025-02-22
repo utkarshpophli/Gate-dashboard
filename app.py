@@ -24,7 +24,7 @@ from azure.core.credentials import AzureKeyCredential
 from supabase import create_client, Client
 
 load_dotenv()
-engine = sqlalchemy.create_engine(DATABASE_URL)
+# engine = sqlalchemy.create_engine(DATABASE_URL)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Optional: for PDF and image text extraction
