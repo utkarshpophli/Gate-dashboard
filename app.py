@@ -237,8 +237,6 @@ def init_db():
                 if not hasattr(response, 'data'):
                     st.error(f"Error inserting phase {phase}")
         
-        st.success("Database initialized successfully!")
-        
     except Exception as e:
         st.error(f"Error initializing database: {str(e)}")
         
