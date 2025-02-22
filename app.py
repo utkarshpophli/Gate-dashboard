@@ -11,6 +11,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from azure.ai.inference import ChatCompletionsClient
 import sqlalchemy
+from sqlalchemy import create_engine, text
 from azure.ai.inference.models import (
     SystemMessage, 
     UserMessage, 
@@ -28,6 +29,7 @@ load_dotenv()
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
 
 # Optional: for PDF and image text extraction
 try:
