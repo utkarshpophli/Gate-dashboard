@@ -25,9 +25,10 @@ from azure.ai.inference.models import (
 from azure.core.credentials import AzureKeyCredential
 from supabase import create_client, Client
 
-AZURE_ENDPOINT = "https://models.inference.ai.azure.com"
-AZURE_API_KEY = st.secrets["AZURE_API_KEY"]  # Replace with your actual API key
-API_VERSION = "2024-12-01-preview"
+# Constants for Azure configuration
+AZURE_API_VERSION = st.secrets["AZURE_API_VERSION"]
+AZURE_ENDPOINT = st.secrets["AZURE_ENDPOINT"]
+AZURE_API_KEY = st.secrets["AZURE_API_KEY"]
 
 load_dotenv()
 
@@ -1508,11 +1509,15 @@ def get_and_verify_token():
 
 def get_chat_client():
     """Returns a configured chat client."""
-    return ChatCompletionsClient(
-        endpoint=AZURE_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_API_KEY),
-        api_version=API_VERSION
-    )
+    try:
+        return ChatCompletionsClient(
+            endpoint=AZURE_ENDPOINT,
+            credential=AzureKeyCredential(AZURE_API_KEY),
+            api_version=AZURE_API_VERSION
+        )
+    except Exception as e:
+        st.error(f"Error initializing chat client: {str(e)}")
+        return None
     
 def rag_assistant_page():
     st.title("RAG Assistant")
@@ -1597,36 +1602,51 @@ def chat_assistant_page():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
+    # Display chat history
     for msg in st.session_state.chat_history:
         st.chat_message(msg["role"]).write(msg["content"])
     
+    # Get user input
     user_input = st.chat_input("Enter your message:")
     if user_input:
+        # Add user message to chat history
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.chat_message("user").write(user_input)
         
-        messages = [SystemMessage("You are a helpful assistant who knows about my study sessions.")]
+        # Prepare messages for the API
+        messages = [
+            SystemMessage(content="You are a helpful assistant specializing in GATE exam preparation, particularly for Data Analytics (DA). You can help with subject understanding, problem-solving approaches, and study strategies.")
+        ]
+        
+        # Add chat history to messages
         for entry in st.session_state.chat_history:
             if entry["role"] == "user":
-                messages.append(UserMessage(entry["content"]))
+                messages.append(UserMessage(content=entry["content"]))
             else:
-                messages.append(AssistantMessage(entry["content"]))
+                messages.append(AssistantMessage(content=entry["content"]))
         
+        # Get chat client
         client = get_chat_client()
-        
-        with st.spinner("Generating response..."):
-            try:
-                response = client.complete(
-                    messages=messages,
-                    temperature=1.0,
-                    top_p=1.0,
-                    model="o3-mini"
-                )
-                assistant_reply = response.choices[0].message.content
-                st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
-                st.chat_message("assistant").write(assistant_reply)
-            except Exception as e:
-                st.error(f"Error generating response: {str(e)}")
+        if client:
+            with st.spinner("Generating response..."):
+                try:
+                    response = client.complete(
+                        messages=messages,
+                        temperature=0.7,
+                        top_p=0.95,
+                        model="o3-mini"  # or your specific Azure model name
+                    )
+                    
+                    if response and hasattr(response, 'choices') and response.choices:
+                        assistant_reply = response.choices[0].message.content
+                        st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
+                        st.chat_message("assistant").write(assistant_reply)
+                    else:
+                        st.error("No response generated. Please try again.")
+                        
+                except Exception as e:
+                    st.error(f"Error generating response: {str(e)}")
+                    st.error("Please check your Azure API configuration.")
 
 
 # ------------------------
