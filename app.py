@@ -55,7 +55,7 @@ def get_db_connection():
     Ensure your DATABASE_URL in your Streamlit secrets is formatted like:
       postgresql://username:password@host:port/dbname
     """
-    DATABASE_URL = st.secrets["DATABASE_URL"]
+    DATABASE_URL = st.secrets["SUPABASE_URL"]
     engine = create_engine(DATABASE_URL)
     return engine.connect()
 
