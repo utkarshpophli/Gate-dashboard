@@ -50,15 +50,15 @@ except ImportError:
 
 # DB_FILE = "data_hub.db"
 
-def get_db_connection():
-    """
-    Creates and returns a connection to your Supabase PostgreSQL database.
-    Ensure your DATABASE_URL in your Streamlit secrets is formatted like:
-      postgresql://username:password@host:port/dbname
-    """
-    DATABASE_URL = st.secrets["SUPABASE_URL"]
-    engine = create_engine(DATABASE_URL)
-    return engine.connect()
+# def get_db_connection():
+#     """
+#     Creates and returns a connection to your Supabase PostgreSQL database.
+#     Ensure your DATABASE_URL in your Streamlit secrets is formatted like:
+#       postgresql://username:password@host:port/dbname
+#     """
+#     DATABASE_URL = st.secrets["SUPABASE_URL"]
+#     engine = create_engine(DATABASE_URL)
+#     return engine.connect()
 
 CREATE_TABLES_SQL = """
 -- Create progress_logs table
@@ -220,26 +220,25 @@ def init_db():
         # Insert default schedule data if not already present
          # Insert default schedule data if not present
         for phase, details in default_phases.items():
-            result = conn.execute(text("SELECT COUNT(*) FROM schedule WHERE phase = :phase"), {"phase": phase})
-            count = result.scalar()  # Get the count as an integer
-            if count == 0:
-                conn.execute(
-                    text("""
-                    INSERT INTO schedule (phase, title, focus, schedule_json)
-                    VALUES (:phase, :title, :focus, :schedule_json)
-                    """),
-                    {
-                        "phase": phase,
-                        "title": details["title"],
-                        "focus": details["focus"],
-                        "schedule_json": json.dumps(details["table"])
-                    }
-                )
-        conn.commit()
-        conn.close()
-        st.success("Database initialized successfully! Tables and default phases created (if not already present).")
+            # Check if phase exists
+            existing = supabase.table("schedule").select("*").eq("phase", phase).execute()
+            
+            if not existing.data:  # If phase doesn't exist, insert it
+                response = supabase.table("schedule").insert({
+                    "phase": phase,
+                    "title": details["title"],
+                    "focus": details["focus"],
+                    "schedule_json": json.dumps(details["table"])
+                }).execute()
+                
+                if response.error:
+                    st.error(f"Error inserting phase {phase}: {response.error}")
+        
+        st.success("Database initialized successfully!")
+        
     except Exception as e:
-        st.error(f"Error initializing database: {e}")
+        st.error(f"Error initializing database: {str(e)}")
+
 # Initialize the database when the app starts
 init_db()
         
