@@ -118,7 +118,7 @@ def init_db():
     try:
         # conn = get_db_connection()
         # Create tables
-        conn.execute(text(CREATE_TABLES_SQL))
+        # conn.execute(text(CREATE_TABLES_SQL))
         
         # Default schedule data (default phases)
         default_phases = {
