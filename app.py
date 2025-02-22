@@ -6,6 +6,7 @@ import datetime
 import requests
 import random
 import pandas as pd
+from io import BytesIO
 import plotly.express as px
 import streamlit as st
 from dotenv import load_dotenv
@@ -433,7 +434,7 @@ def insert_progress_log(date_str, phase, subject, hours, notes):
 def get_progress_logs():
     """Retrieves all progress logs."""
     try:
-        response = supabase.table('progress_logs').select('*').execute()
+        response = supabase.table('progress_logs').select('*').order('date', ascending=False).execute()
         return response.data if hasattr(response, 'data') else []
     except Exception as e:
         st.error(f"Error fetching progress logs: {str(e)}")
@@ -555,32 +556,57 @@ def get_all_resources():
         return []
 
 def insert_study_goal(description, target_hours, achieved_hours=0):
-    data = {"description": description, "target_hours": target_hours, "achieved_hours": achieved_hours}
-    result = supabase.table("study_goals").insert(data).execute()
-    if result.error:
-        st.error(f"Error inserting study goal: {result.error}")
+    """Inserts a new study goal into the database."""
+    try:
+        data = {
+            "description": description,
+            "target_hours": float(target_hours),
+            "achieved_hours": float(achieved_hours)
+        }
+        response = supabase.table("study_goals").insert(data).execute()
+        return hasattr(response, 'data') and response.data
+    except Exception as e:
+        st.error(f"Error inserting study goal: {str(e)}")
+        return False
 
 def get_study_goals():
-    result = supabase.table("study_goals").select("*").execute()
-    if result.error:
-        st.error(f"Error fetching study goals: {result.error}")
+    """Retrieves all study goals from the database."""
+    try:
+        response = supabase.table("study_goals").select("*").execute()
+        return response.data if hasattr(response, 'data') else []
+    except Exception as e:
+        st.error(f"Error fetching study goals: {str(e)}")
         return []
-    return result.data
 
 def update_goal_achievement(goal_id, additional_hours):
-    # Since Supabase doesn't support arithmetic updates directly, fetch current value first.
-    goals = get_study_goals()
-    current = None
-    for g in goals:
-        if g["id"] == goal_id:
-            current = g["achieved_hours"]
-            break
-    if current is not None:
-        new_val = current + additional_hours
-        result = supabase.table("study_goals").update({"achieved_hours": new_val}).eq("id", goal_id).execute()
-        if result.error:
-            st.error(f"Error updating goal: {result.error}")
-
+    """Updates the achieved hours for a study goal."""
+    try:
+        # Get current goal data
+        response = supabase.table("study_goals").select("*").eq('id', goal_id).execute()
+        if hasattr(response, 'data') and response.data:
+            current_goal = response.data[0]
+            new_achieved = float(current_goal['achieved_hours']) + float(additional_hours)
+            
+            # Update the goal
+            update_response = supabase.table("study_goals").update(
+                {"achieved_hours": new_achieved}
+            ).eq('id', goal_id).execute()
+            
+            return hasattr(update_response, 'data') and update_response.data
+        return False
+    except Exception as e:
+        st.error(f"Error updating goal achievement: {str(e)}")
+        return False
+        
+def delete_study_goal(goal_id):
+    """Deletes a study goal from the database."""
+    try:
+        response = supabase.table("study_goals").delete().eq('id', goal_id).execute()
+        return hasattr(response, 'data') and response.data
+    except Exception as e:
+        st.error(f"Error deleting study goal: {str(e)}")
+        return False
+        
 def insert_revision_note(subject, short_notes, formula):
     data = {"subject": subject, "short_notes": short_notes, "formula": formula}
     result = supabase.table("revision_notes").insert(data).execute()
@@ -593,6 +619,15 @@ def get_revision_notes():
         st.error(f"Error fetching revision notes: {result.error}")
         return []
     return result.data
+
+def get_progress_logs_for_report():
+    """Retrieves all progress logs with additional analytics for reporting."""
+    try:
+        response = supabase.table('progress_logs').select('*').order('date', ascending=False).execute()
+        return response.data if hasattr(response, 'data') else []
+    except Exception as e:
+        st.error(f"Error fetching progress logs: {str(e)}")
+        return []
 
 # ------------------------
 # 3. Global Lists for Dropdowns
@@ -1075,53 +1110,345 @@ def resources_page():
 def study_goals_page():
     st.title("Study Goals")
     st.subheader("Set and Track Your Study Targets")
-    with st.form("goals_form"):
-        description = st.text_input("Goal Description", "E.g., Study 50 hours in November")
-        target_hours = st.number_input("Target Hours", min_value=0.0, step=1.0)
-        submit = st.form_submit_button("Add Goal")
-        if submit:
-            if description and target_hours > 0:
-                insert_study_goal(description, target_hours)
-                st.success("Study goal added!")
-            else:
-                st.error("Please provide a valid goal description and target hours.")
-    goals = get_study_goals()
-    if goals:
-        st.markdown("### Current Study Goals")
-        for goal in goals:
-            achieved = goal["achieved_hours"]
-            target = goal["target_hours"]
-            progress = (achieved / target * 100) if target else 0
-            st.write(f"**{goal['description']}**")
-            st.progress(min(int(progress), 100))
-            st.write(f"{achieved:.1f} / {target:.1f} hours achieved")
-    else:
-        st.info("No study goals set yet.")
 
+    # Create tabs for different goal management sections
+    tab1, tab2 = st.tabs(["Add Goal", "View Goals"])
+
+    with tab1:
+        with st.form("goals_form"):
+            description = st.text_input("Goal Description", 
+                placeholder="E.g., Complete Linear Algebra in 2 weeks")
+            target_hours = st.number_input("Target Hours", 
+                min_value=0.0, step=0.5)
+            initial_achieved = st.number_input("Initial Achieved Hours (Optional)", 
+                min_value=0.0, step=0.5)
+            
+            submit = st.form_submit_button("Add Goal")
+            
+            if submit:
+                if description and target_hours > 0:
+                    if insert_study_goal(description, target_hours, initial_achieved):
+                        st.success("Study goal added successfully!")
+                        st.rerun()
+                else:
+                    st.error("Please provide a valid goal description and target hours.")
+
+    with tab2:
+        goals = get_study_goals()
+        if goals:
+            # Convert to DataFrame for easier manipulation
+            df_goals = pd.DataFrame(goals)
+            df_goals = df_goals.sort_values('achieved_hours', ascending=False)
+
+            # Overall progress summary
+            st.subheader("Overall Progress")
+            total_target = df_goals['target_hours'].sum()
+            total_achieved = df_goals['achieved_hours'].sum()
+            overall_progress = (total_achieved / total_target * 100) if total_target > 0 else 0
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Target Hours", f"{total_target:.1f}")
+            with col2:
+                st.metric("Total Achieved Hours", f"{total_achieved:.1f}")
+            with col3:
+                st.metric("Overall Progress", f"{overall_progress:.1f}%")
+
+            # Individual goals
+            st.subheader("Individual Goals")
+            for _, goal in df_goals.iterrows():
+                with st.expander(f"Goal: {goal['description']}"):
+                    progress = (goal['achieved_hours'] / goal['target_hours'] * 100) if goal['target_hours'] > 0 else 0
+                    
+                    # Progress bar
+                    st.progress(min(float(progress) / 100, 1.0))
+                    
+                    # Goal details
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Target Hours", f"{goal['target_hours']:.1f}")
+                    with col2:
+                        st.metric("Achieved Hours", f"{goal['achieved_hours']:.1f}")
+                    with col3:
+                        st.metric("Progress", f"{progress:.1f}%")
+                    
+                    # Update achieved hours
+                    with st.form(f"update_goal_{goal['id']}"):
+                        additional_hours = st.number_input(
+                            "Add Hours",
+                            min_value=0.0,
+                            step=0.5,
+                            key=f"add_hours_{goal['id']}"
+                        )
+                        update_col1, update_col2 = st.columns([1, 4])
+                        with update_col1:
+                            if st.form_submit_button("Update"):
+                                if update_goal_achievement(goal['id'], additional_hours):
+                                    st.success("Goal updated successfully!")
+                                    st.rerun()
+                        
+                        with update_col2:
+                            if st.form_submit_button("Delete Goal"):
+                                if delete_study_goal(goal['id']):
+                                    st.success("Goal deleted successfully!")
+                                    st.rerun()
+        else:
+            st.info("No study goals set yet. Use the form above to add goals.")
+            
 def calendar_view_page():
     st.title("Calendar View")
     st.subheader("View Your Study Sessions Grouped by Date")
-    logs = get_progress_logs()
-    if logs:
-        df_logs = pd.DataFrame(logs, columns=logs[0].keys())
+
+    try:
+        # Get progress logs
+        logs_response = supabase.table('progress_logs').select('*').order('date', ascending=False).execute()
+        
+        if not hasattr(logs_response, 'data') or not logs_response.data:
+            st.info("No study sessions logged yet.")
+            return
+        
+        logs = logs_response.data
+        
+        # Convert to DataFrame
+        df_logs = pd.DataFrame(logs)
         df_logs['date'] = pd.to_datetime(df_logs['date'])
-        grouped = df_logs.groupby(df_logs['date'].dt.date)
-        for d, group in grouped:
-            with st.expander(f"{d} - {len(group)} session(s)"):
-                st.dataframe(group)
-    else:
-        st.info("No study sessions logged yet.")
+        
+        # Add month-year column for grouping
+        df_logs['month_year'] = df_logs['date'].dt.strftime('%B %Y')
+        
+        # Get unique months
+        months = df_logs['month_year'].unique()
+        
+        # Create month tabs
+        if len(months) > 0:
+            month_tabs = st.tabs(months)
+            
+            for i, month in enumerate(months):
+                with month_tabs[i]:
+                    month_data = df_logs[df_logs['month_year'] == month]
+                    
+                    # Group by date
+                    dates = month_data['date'].dt.date.unique()
+                    
+                    for date in dates:
+                        date_data = month_data[month_data['date'].dt.date == date]
+                        
+                        # Calculate daily summary
+                        total_hours = date_data['hours'].sum()
+                        subjects_covered = date_data['subject'].nunique()
+                        
+                        with st.expander(f"{date.strftime('%A, %B %d, %Y')} - {total_hours:.1f} hours, {subjects_covered} subjects"):
+                            # Create columns for better organization
+                            for _, session in date_data.iterrows():
+                                col1, col2, col3 = st.columns([2, 1, 1])
+                                with col1:
+                                    st.write(f"**Subject:** {session['subject']}")
+                                    if session['notes']:
+                                        st.write(f"*Notes:* {session['notes']}")
+                                with col2:
+                                    st.write(f"**Hours:** {session['hours']}")
+                                with col3:
+                                    st.write(f"**Phase:** {session['phase']}")
+                                st.markdown("---")
+                            
+                            # Daily summary metrics
+                            st.markdown("### Daily Summary")
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Total Hours", f"{total_hours:.1f}")
+                            with col2:
+                                st.metric("Subjects Covered", subjects_covered)
+                            with col3:
+                                avg_hours = total_hours / len(date_data)
+                                st.metric("Avg Hours/Session", f"{avg_hours:.1f}")
+                            
+                            # Show subject breakdown
+                            subject_hours = date_data.groupby('subject')['hours'].sum()
+                            
+                            # Create a bar chart for subject distribution
+                            fig = px.bar(
+                                x=subject_hours.index,
+                                y=subject_hours.values,
+                                title="Hours by Subject",
+                                labels={'x': 'Subject', 'y': 'Hours'}
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Option to delete sessions
+                            if st.button(f"Delete All Sessions for {date}", key=f"del_{date}"):
+                                try:
+                                    # Get IDs of sessions for this date
+                                    session_ids = date_data['id'].tolist()
+                                    for session_id in session_ids:
+                                        response = supabase.table('progress_logs').delete().eq('id', session_id).execute()
+                                    st.success(f"Deleted all sessions for {date}")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error deleting sessions: {str(e)}")
+
+        # Add monthly summary
+        st.sidebar.markdown("## Monthly Summary")
+        for month in months:
+            month_data = df_logs[df_logs['month_year'] == month]
+            total_month_hours = month_data['hours'].sum()
+            total_month_sessions = len(month_data)
+            st.sidebar.markdown(f"**{month}**")
+            st.sidebar.markdown(f"- Total Hours: {total_month_hours:.1f}")
+            st.sidebar.markdown(f"- Sessions: {total_month_sessions}")
+            st.sidebar.markdown("---")
+
+    except Exception as e:
+        st.error(f"Error in calendar view: {str(e)}")
+        return
 
 def download_reports_page():
     st.title("Download Reports")
-    st.subheader("Download Your Study Sessions Data as CSV")
-    logs = get_progress_logs()
-    if logs:
-        df_logs = pd.DataFrame(logs, columns=logs[0].keys())
-        csv = df_logs.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV", csv, "study_sessions.csv", "text/csv")
-    else:
-        st.info("No study sessions available to download.")
+    st.subheader("Study Session Reports and Analytics")
+
+    try:
+        # Get progress logs
+        logs_response = supabase.table('progress_logs').select('*').order('date', ascending=False).execute()
+        
+        if not hasattr(logs_response, 'data') or not logs_response.data:
+            st.info("No study sessions available to download.")
+            return
+        
+        logs = logs_response.data
+        
+        # Convert to DataFrame
+        df_logs = pd.DataFrame(logs)
+        df_logs['date'] = pd.to_datetime(df_logs['date'])
+        
+        # Create different report types
+        st.header("Available Reports")
+        
+        # 1. Basic Study Log
+        st.subheader("1. Basic Study Log")
+        st.dataframe(df_logs[['date', 'subject', 'phase', 'hours', 'notes']])
+        
+        csv_basic = df_logs.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "Download Basic Study Log (CSV)",
+            csv_basic,
+            "study_sessions_basic.csv",
+            "text/csv",
+            key='download_basic'
+        )
+
+        # 2. Subject-wise Summary
+        st.subheader("2. Subject-wise Summary")
+        subject_summary = df_logs.groupby('subject').agg({
+            'hours': ['sum', 'mean', 'count'],
+            'date': 'nunique'
+        }).round(2)
+        subject_summary.columns = ['Total Hours', 'Avg Hours/Session', 'Number of Sessions', 'Number of Days']
+        st.dataframe(subject_summary)
+        
+        csv_subject = subject_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Subject Summary (CSV)",
+            csv_subject,
+            "subject_summary.csv",
+            "text/csv",
+            key='download_subject'
+        )
+
+        # 3. Daily Summary
+        st.subheader("3. Daily Summary")
+        daily_summary = df_logs.groupby('date').agg({
+            'hours': ['sum', 'count'],
+            'subject': 'nunique'
+        }).round(2)
+        daily_summary.columns = ['Total Hours', 'Number of Sessions', 'Subjects Covered']
+        st.dataframe(daily_summary)
+        
+        csv_daily = daily_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Daily Summary (CSV)",
+            csv_daily,
+            "daily_summary.csv",
+            "text/csv",
+            key='download_daily'
+        )
+
+        # 4. Phase-wise Progress
+        st.subheader("4. Phase-wise Progress")
+        phase_summary = df_logs.groupby('phase').agg({
+            'hours': ['sum', 'mean', 'count'],
+            'subject': 'nunique',
+            'date': 'nunique'
+        }).round(2)
+        phase_summary.columns = ['Total Hours', 'Avg Hours/Session', 'Number of Sessions', 
+                               'Unique Subjects', 'Number of Days']
+        st.dataframe(phase_summary)
+        
+        csv_phase = phase_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Phase Summary (CSV)",
+            csv_phase,
+            "phase_summary.csv",
+            "text/csv",
+            key='download_phase'
+        )
+
+        # 5. Monthly Summary
+        st.subheader("5. Monthly Summary")
+        df_logs['month_year'] = df_logs['date'].dt.strftime('%Y-%m')
+        monthly_summary = df_logs.groupby('month_year').agg({
+            'hours': ['sum', 'mean', 'count'],
+            'subject': 'nunique',
+            'date': 'nunique'
+        }).round(2)
+        monthly_summary.columns = ['Total Hours', 'Avg Hours/Session', 'Number of Sessions',
+                                 'Unique Subjects', 'Number of Days']
+        st.dataframe(monthly_summary)
+        
+        csv_monthly = monthly_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Monthly Summary (CSV)",
+            csv_monthly,
+            "monthly_summary.csv",
+            "text/csv",
+            key='download_monthly'
+        )
+
+        # 6. Comprehensive Report
+        st.subheader("6. Comprehensive Report")
+        
+        # Create Excel file with multiple sheets
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_logs.to_excel(writer, sheet_name='Study Sessions', index=False)
+            subject_summary.to_excel(writer, sheet_name='Subject Summary')
+            daily_summary.to_excel(writer, sheet_name='Daily Summary')
+            phase_summary.to_excel(writer, sheet_name='Phase Summary')
+            monthly_summary.to_excel(writer, sheet_name='Monthly Summary')
+        
+        st.download_button(
+            "Download Comprehensive Report (Excel)",
+            output.getvalue(),
+            "comprehensive_study_report.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key='download_comprehensive'
+        )
+
+        # Display overall statistics
+        st.header("Overall Statistics")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Study Hours", f"{df_logs['hours'].sum():.1f}")
+        with col2:
+            st.metric("Total Sessions", len(df_logs))
+        with col3:
+            st.metric("Days Studied", df_logs['date'].nunique())
+        with col4:
+            avg_hours_per_day = df_logs['hours'].sum() / df_logs['date'].nunique()
+            st.metric("Avg Hours/Day", f"{avg_hours_per_day:.1f}")
+
+    except Exception as e:
+        st.error(f"Error generating reports: {str(e)}")
+        return
 
 def focus_timer_page():
     st.title("Focus Timer")
