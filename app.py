@@ -1485,36 +1485,37 @@ def focus_timer_page():
 
 def get_and_verify_token():
     """
-    Prompts the user to enter a GitHub token.
-    Verifies the token by sending a minimal test request using a lightweight model.
-    If verified, stores it in session_state and returns the token.
+    Prompts the user to enter a GitHub token and verifies it.
+    Returns the verified token or None.
     """
     if "token" in st.session_state and st.session_state.token:
         return st.session_state.token
 
     token_input = st.text_input("Enter your GitHub Token:", type="password")
+    
     if token_input:
         with st.spinner("Verifying token..."):
             try:
-                test_client = ChatCompletionsClient(
-                    endpoint="https://models.inference.ai.azure.com",
-                    credential=AzureKeyCredential(token_input),
-                    api_version="2024-12-01-preview"
+                # Test the token with a minimal GitHub API request
+                headers = {
+                    "Authorization": f"token {token_input}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+                response = requests.get(
+                    "https://api.github.com/user", 
+                    headers=headers
                 )
-                test_response = test_client.complete(
-                    messages=[
-                        SystemMessage("Token verification test."),
-                        UserMessage("Ping")
-                    ],
-                    temperature=1.0,
-                    top_p=1.0,
-                    model="o3-mini"
-                )
-                st.success("Token verified successfully!")
-                st.session_state.token = token_input
-                return token_input
+                
+                if response.status_code == 200:
+                    st.success("Token verified successfully!")
+                    st.session_state.token = token_input
+                    return token_input
+                else:
+                    st.error(f"Token verification failed: ({response.status_code}) {response.json().get('message', 'Unknown error')}")
+                    return None
+                    
             except Exception as e:
-                st.error(f"Token verification failed: {e}")
+                st.error(f"Token verification error: {str(e)}")
                 return None
     return None
 
@@ -1610,53 +1611,86 @@ def chat_assistant_page():
     st.title("Chat Assistant")
     st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
     
+    # Get and verify token
     token = get_and_verify_token()
     if not token:
         st.warning("Please enter and verify your GitHub token above to start chatting.")
         return
-    
+        
+    # Initialize chat history
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
+    # Display chat history
     for msg in st.session_state.chat_history:
-        st.chat_message(msg["role"]).write(msg["content"])
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
     
+    # Get user input
     user_input = st.chat_input("Enter your message:")
+    
     if user_input:
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        st.chat_message("user").write(user_input)
+        # Add user message to history
+        st.session_state.chat_history.append({
+            "role": "user", 
+            "content": user_input
+        })
         
-        messages = [SystemMessage("You are a helpful assistant who knows about my study sessions.")]
-        for entry in st.session_state.chat_history:
-            if entry["role"] == "user":
-                messages.append(UserMessage(entry["content"]))
-            else:
-                messages.append(AssistantMessage(entry["content"]))
+        with st.chat_message("user"):
+            st.write(user_input)
         
-        endpoint = "https://models.inference.ai.azure.com"
-        model_name = "o3-mini"
-        
-        client = ChatCompletionsClient(
-            endpoint=endpoint,
-            credential=AzureKeyCredential(token),
-            api_version="2024-12-01-preview"
-        )
-        
-        with st.spinner("Generating response..."):
-            try:
+        try:
+            # Create Azure OpenAI client
+            client = ChatCompletionsClient(
+                endpoint="https://models.inference.ai.azure.com",
+                credential=AzureKeyCredential(token),
+                api_version="2024-12-01-preview"
+            )
+            
+            # Prepare messages
+            messages = [
+                SystemMessage("You are a helpful study assistant."),
+                *[UserMessage(msg["content"]) if msg["role"] == "user" 
+                  else AssistantMessage(msg["content"]) 
+                  for msg in st.session_state.chat_history]
+            ]
+            
+            # Get response
+            with st.spinner("Thinking..."):
                 response = client.complete(
                     messages=messages,
-                    temperature=1.0,
-                    top_p=1.0,
-                    model=model_name
+                    temperature=0.7,
+                    top_p=0.95,
+                    model="o3-mini"
                 )
+                
                 assistant_reply = response.choices[0].message.content
-                st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
-                st.chat_message("assistant").write(assistant_reply)
-            except Exception as e:
-                st.error(f"Error generating response: {e}")
+                
+                # Add assistant response to history
+                st.session_state.chat_history.append({
+                    "role": "assistant",
+                    "content": assistant_reply
+                })
+                
+                with st.chat_message("assistant"):
+                    st.write(assistant_reply)
+                    
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
 
+# At the start of your app
+if 'token' not in st.session_state:
+    st.session_state.token = None
 
+# Add a function to clear token
+def clear_token():
+    st.session_state.token = None
+    st.session_state.chat_history = []
+
+# Add a button to clear token if needed
+if st.session_state.token:
+    if st.sidebar.button("Clear Token"):
+        clear_token()
 # ------------------------
 # 6. Main App Navigation
 # ------------------------
