@@ -499,17 +499,27 @@ def get_progress_logs():
         return []
 
 def insert_question(subject, question, answer):
-    data = {"subject": subject, "question": question, "answer": answer}
-    result = supabase.table("question_bank").insert(data).execute()
-    if result.error:
-        st.error(f"Error inserting question: {result.error}")
+    """Inserts a new question into the question bank."""
+    try:
+        data = {
+            "subject": subject,
+            "question": question,
+            "answer": answer
+        }
+        response = supabase.table("question_bank").insert(data).execute()
+        return hasattr(response, 'data') and response.data
+    except Exception as e:
+        st.error(f"Error inserting question: {str(e)}")
+        return False
 
 def get_all_questions():
-    result = supabase.table("question_bank").select("*").execute()
-    if result.error:
-        st.error(f"Error fetching questions: {result.error}")
+    """Retrieves all questions from the question bank."""
+    try:
+        response = supabase.table("question_bank").select("*").execute()
+        return response.data if hasattr(response, 'data') else []
+    except Exception as e:
+        st.error(f"Error fetching questions: {str(e)}")
         return []
-    return result.data
 
 def insert_resource(subject, title, link, filename):
     data = {"subject": subject, "title": title, "link": link, "filename": filename}
@@ -873,23 +883,70 @@ def revision_hub_page():
 def question_bank_page():
     st.title("Question Bank")
     st.subheader("Store and Review Questions & Patterns by Subject")
+
+    # Add question form
     with st.form("question_bank_form"):
-        subject = st.text_input("Subject")
+        subject = st.selectbox("Subject", SUBJECT_LIST)  # Use the global SUBJECT_LIST
         question_text = st.text_area("Question")
         answer_text = st.text_area("Answer / Pattern (optional)")
         submit = st.form_submit_button("Add Question")
+        
         if submit:
             if subject and question_text:
-                insert_question(subject, question_text, answer_text)
-                st.success("Question added!")
+                if insert_question(subject, question_text, answer_text):
+                    st.success("Question added successfully!")
+                    st.rerun()  # Refresh the page to show the new question
             else:
                 st.error("Please provide both a subject and a question.")
-    questions = get_all_questions()
-    if questions:
-        df_q = pd.DataFrame(questions, columns=questions[0].keys())
-        st.dataframe(df_q)
-    else:
-        st.info("No questions added yet.")
+
+    # Display existing questions
+    try:
+        questions = get_all_questions()
+        if questions:
+            st.header("Existing Questions")
+            
+            # Add search/filter functionality
+            search_term = st.text_input("Search questions (by subject or content):")
+            
+            # Convert to DataFrame
+            df_questions = pd.DataFrame(questions)
+            
+            # Apply search filter if provided
+            if search_term:
+                mask = (
+                    df_questions['subject'].str.contains(search_term, case=False, na=False) |
+                    df_questions['question'].str.contains(search_term, case=False, na=False) |
+                    df_questions['answer'].str.contains(search_term, case=False, na=False)
+                )
+                df_questions = df_questions[mask]
+
+            # Group by subject
+            subjects = df_questions['subject'].unique()
+            
+            for subject in subjects:
+                with st.expander(f"{subject} ({len(df_questions[df_questions['subject'] == subject])} questions)"):
+                    subject_questions = df_questions[df_questions['subject'] == subject]
+                    
+                    for _, row in subject_questions.iterrows():
+                        st.markdown("---")
+                        st.markdown(f"**Question:** {row['question']}")
+                        if row['answer']:
+                            st.markdown(f"**Answer:** {row['answer']}")
+                        
+                        # Add delete button for each question
+                        if st.button(f"Delete Question {row['id']}", key=f"del_{row['id']}"):
+                            try:
+                                response = supabase.table("question_bank").delete().eq('id', row['id']).execute()
+                                if hasattr(response, 'data'):
+                                    st.success(f"Question {row['id']} deleted successfully!")
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"Error deleting question: {str(e)}")
+        else:
+            st.info("No questions added yet. Use the form above to add questions.")
+            
+    except Exception as e:
+        st.error(f"Error loading questions: {str(e)}")
 
 def resources_page():
     st.title("Resources")
