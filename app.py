@@ -45,7 +45,16 @@ except ImportError:
 # 1. Database Setup & Helpers
 # ============================
 
-DB_FILE = "data_hub.db"
+# DB_FILE = "data_hub.db"
+
+def get_db_connection():
+    """
+    Creates and returns a connection to your Supabase PostgreSQL database.
+    The connection string should be stored in your Streamlit secrets as DATABASE_URL.
+    """
+    DATABASE_URL = st.secrets["DATABASE_URL"]
+    engine = create_engine(DATABASE_URL)
+    return engine.connect()
 
 CREATE_TABLES_SQL = """
 -- Create progress_logs table
@@ -103,181 +112,181 @@ CREATE TABLE IF NOT EXISTS revision_notes (
 def init_db():
     """Initializes the Supabase database by creating tables if they do not exist."""
     try:
-        with engine.connect() as connection:
-            connection.execute(sqlalchemy.text(CREATE_TABLES_SQL))
+        with get_db_connection() as conn:
+            conn.execute(text(CREATE_TABLES_SQL))
         st.success("Database initialized successfully! Tables created (if not already present).")
     except Exception as e:
         st.error(f"Error initializing database: {e}")
-
-def init_db():
-    conn = get_db_connection()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS progress_logs (
-            id SERIAL PRIMARY KEY,
-            date TEXT NOT NULL,
-            phase TEXT NOT NULL,
-            subject TEXT NOT NULL,
-            hours REAL NOT NULL,
-            notes TEXT
-        );
-    """)
-    # Create schedule table
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS schedule (
-            phase TEXT PRIMARY KEY,
-            title TEXT,
-            focus TEXT,
-            schedule_json TEXT
-        )
-    """)
-    # Create question_bank table (for GateOverflow questions)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS question_bank (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT NOT NULL,
-            question TEXT NOT NULL,
-            answer TEXT
-        )
-    """)
-    # Create resources table (for uploaded PDFs/images)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS resources (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT,
-            title TEXT,
-            link TEXT,
-            filename TEXT
-        )
-    """)
-    # Create study_goals table
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS study_goals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            description TEXT,
-            target_hours REAL,
-            achieved_hours REAL
-        )
-    """)
-    # Create revision_notes table
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS revision_notes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject TEXT NOT NULL,
-            short_notes TEXT,
-            formula TEXT
-        )
-    """)
-    conn.commit()
+        
+# def init_db():
+#     conn = get_db_connection()
+#     conn.execute("""
+#         CREATE TABLE IF NOT EXISTS progress_logs (
+#             id SERIAL PRIMARY KEY,
+#             date TEXT NOT NULL,
+#             phase TEXT NOT NULL,
+#             subject TEXT NOT NULL,
+#             hours REAL NOT NULL,
+#             notes TEXT
+#         );
+#     """)
+#     # Create schedule table
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS schedule (
+#             phase TEXT PRIMARY KEY,
+#             title TEXT,
+#             focus TEXT,
+#             schedule_json TEXT
+#         )
+#     """)
+#     # Create question_bank table (for GateOverflow questions)
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS question_bank (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             subject TEXT NOT NULL,
+#             question TEXT NOT NULL,
+#             answer TEXT
+#         )
+#     """)
+#     # Create resources table (for uploaded PDFs/images)
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS resources (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             subject TEXT,
+#             title TEXT,
+#             link TEXT,
+#             filename TEXT
+#         )
+#     """)
+#     # Create study_goals table
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS study_goals (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             description TEXT,
+#             target_hours REAL,
+#             achieved_hours REAL
+#         )
+#     """)
+#     # Create revision_notes table
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS revision_notes (
+#             id INTEGER PRIMARY KEY AUTOINCREMENT,
+#             subject TEXT NOT NULL,
+#             short_notes TEXT,
+#             formula TEXT
+#         )
+#     """)
+#     conn.commit()
     
-    # Insert default schedule data if not already present.
-    default_phases = {
-        "Phase 1": {
-            "title": "Foundations (Months 1–2)",
-            "focus": "Engineering Mathematics & Discrete Mathematics",
-            "table": [
-                ["Monday", "7:00-9:00 PM", "Theory Lecture", "Calculus Fundamentals"],
-                ["Tuesday", "7:00-9:00 PM", "Problem-Solving", "Calculus: Worked examples and derivations"],
-                ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Linear Algebra Basics: Vector spaces, matrices, operations"],
-                ["Thursday", "7:00-9:00 PM", "Problem-Solving", "Linear Algebra: Determinants, eigenvalues"],
-                ["Friday", "7:00-9:00 PM", "Weekly Recap & Quiz", "Combined Topics: Quick tests and self-assessment"],
-                ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Live lecture reinforcing fundamentals"],
-                ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "In-depth lecture on Calculus/Linear Algebra"],
-                ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Exercises and sample problems"],
-                ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Comprehensive problem sets"],
-                ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Full-length practice test and error analysis"]
-            ]
-        },
-        "Phase 2": {
-            "title": "Advanced Mathematics & Probability/Statistics (Months 3–4)",
-            "focus": "Advanced Probability & Statistics topics (counting, axioms, distributions, optimization, hypothesis testing) with Go Classes sessions for clarifications.",
-            "table": [
-                ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
-                ["Monday", "7:00-9:00 PM", "Theory Lecture", "Counting Techniques & Probability Basics: Permutations, combinations, axioms"],
-                ["Tuesday", "7:00-9:00 PM", "Problem-Solving", "Probability Concepts: Sample spaces, independence, events"],
-                ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Random Variables & Distributions: Discrete (Bernoulli, Binomial) and Continuous (Uniform, Exponential)"],
-                ["Thursday", "7:00-9:00 PM", "Practice & Exercises", "Statistical Inference: Conditional probability, Bayes' theorem"],
-                ["Friday", "7:00-9:00 PM", "Recap & Quiz", "Review: CLT, confidence intervals, z-test, t-test, chi-squared test"],
-                ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Session on key problem areas in probability/statistics"],
-                ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "Advanced Topics: In-depth derivations and optimization techniques"],
-                ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Practice: Challenging problems and test-style questions"],
-                ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Combined exercises and review"],
-                ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Assessment: Timed tests with detailed error analysis"]
-            ]
-        },
-        "Phase 3": {
-            "title": "Programming, Data Structures, Algorithms & Database Management (Months 5–7)",
-            "focus": "Python programming, core data structures and algorithms, and database management fundamentals, with supplementary Go Classes sessions for coding and database concepts.",
-            "table": [
-                ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
-                ["Monday", "7:00-9:00 PM", "Theory Lecture", "Python Programming & Basic Data Structures: Syntax, data types, stacks, queues"],
-                ["Tuesday", "7:00-9:00 PM", "Coding Practice", "Data Structures: Implementation of linked lists, arrays, etc."],
-                ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Algorithms: Search algorithms (linear, binary) and basic sorting"],
-                ["Thursday", "7:00-9:00 PM", "Problem-Solving", "Hands-On: Coding exercises on trees, hash tables, etc."],
-                ["Friday", "7:00-9:00 PM", "Recap & Quiz", "Review: Quick quizzes and conceptual coding reviews"],
-                ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Live session on coding challenges and database queries"],
-                ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "Database Management: ER-model, relational algebra, SQL, normalization"],
-                ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Practice: Hands-on coding and SQL query practices"],
-                ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Combined coding challenges and algorithm problem sets"],
-                ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Assessment: Full-length tests with detailed walkthroughs"]
-            ]
-        },
-        "Phase 4": {
-            "title": "Machine Learning & Artificial Intelligence (Months 8–10)",
-            "focus": "Supervised & unsupervised machine learning techniques and AI fundamentals, with interactive Go Classes sessions on advanced ML/AI topics.",
-            "table": [
-                ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
-                ["Monday", "7:00-9:00 PM", "Theory Lecture", "Supervised Learning: Regression (simple, multiple, ridge) & Classification (logistic, SVM, etc.)"],
-                ["Tuesday", "7:00-9:00 PM", "Practical Implementation", "Supervised Learning: Python coding (k-nearest neighbors, decision trees)"],
-                ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Neural Networks: Fundamentals of MLP and feed-forward architecture"],
-                ["Thursday", "7:00-9:00 PM", "Coding Practice", "Unsupervised Learning: Clustering (k-means, hierarchical) and PCA implementations"],
-                ["Friday", "7:00-9:00 PM", "Recap & Quiz", "Review: Bias-variance, cross-validation, and key ML/AI concepts"],
-                ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Interactive session on ML/AI problem solving"],
-                ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "Artificial Intelligence: Search strategies, logic, reasoning under uncertainty"],
-                ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Practice: Case studies and sample problems on ML/AI algorithms"],
-                ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Mixed Topics: Comprehensive exercises integrating ML/AI concepts"],
-                ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Assessment: Full-length mock tests with in-depth error analysis"]
-            ]
-        },
-        "Phase 5": {
-            "title": "Revision, Practice & Mock Tests (Months 11–12)",
-            "focus": "Comprehensive revision of all subjects with intensive practice, mock tests, and error analysis. Final Go Classes sessions polish exam strategies.",
-            "table": [
-                ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
-                ["Monday", "7:00-9:00 PM", "Revision Session", "Quick review of Calculus, Linear Algebra, Discrete Math"],
-                ["Tuesday", "7:00-9:00 PM", "Revision & Practice", "Probability & Statistics: Key formulas and targeted problems"],
-                ["Wednesday", "7:00-9:00 PM", "Revision Session", "Programming & Algorithms: Code review and challenging problem solving"],
-                ["Thursday", "7:00-9:00 PM", "Revision & Practice", "Database Management: SQL queries, normalization, ER-model refresh"],
-                ["Friday", "7:00-9:00 PM", "Mixed Revision & Quiz", "Machine Learning & AI: Quick quizzes and concept reviews"],
-                ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Final review and strategy session"],
-                ["Saturday", "10:00 AM-12:00 PM", "Full-Length Mock Test", "Simulated exam covering the entire syllabus"],
-                ["Saturday", "1:00-4:00 PM", "Error Analysis & Revision", "Detailed review of mistakes and focus on weak areas"],
-                ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Combined problem sets for speed and accuracy"],
-                ["Sunday", "1:00-5:00 PM", "Final Revision & Strategy", "Overall preparation: Strategy session, key summaries, and Q&A review"]
-            ]
-        },
-        "General Aptitude": {
-            "title": "General Aptitude",
-            "focus": "Quantitative, Logical, and Verbal skills",
-            "table": [
-                ["Monday", "5:00-6:00 PM", "Practice", "Quantitative problems"],
-                ["Wednesday", "5:00-6:00 PM", "Practice", "Logical reasoning puzzles"],
-                ["Friday", "5:00-6:00 PM", "Practice", "Verbal ability and reading comprehension"]
-            ]
-        }
-    }
+#     # Insert default schedule data if not already present.
+#     default_phases = {
+#         "Phase 1": {
+#             "title": "Foundations (Months 1–2)",
+#             "focus": "Engineering Mathematics & Discrete Mathematics",
+#             "table": [
+#                 ["Monday", "7:00-9:00 PM", "Theory Lecture", "Calculus Fundamentals"],
+#                 ["Tuesday", "7:00-9:00 PM", "Problem-Solving", "Calculus: Worked examples and derivations"],
+#                 ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Linear Algebra Basics: Vector spaces, matrices, operations"],
+#                 ["Thursday", "7:00-9:00 PM", "Problem-Solving", "Linear Algebra: Determinants, eigenvalues"],
+#                 ["Friday", "7:00-9:00 PM", "Weekly Recap & Quiz", "Combined Topics: Quick tests and self-assessment"],
+#                 ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Live lecture reinforcing fundamentals"],
+#                 ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "In-depth lecture on Calculus/Linear Algebra"],
+#                 ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Exercises and sample problems"],
+#                 ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Comprehensive problem sets"],
+#                 ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Full-length practice test and error analysis"]
+#             ]
+#         },
+#         "Phase 2": {
+#             "title": "Advanced Mathematics & Probability/Statistics (Months 3–4)",
+#             "focus": "Advanced Probability & Statistics topics (counting, axioms, distributions, optimization, hypothesis testing) with Go Classes sessions for clarifications.",
+#             "table": [
+#                 ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
+#                 ["Monday", "7:00-9:00 PM", "Theory Lecture", "Counting Techniques & Probability Basics: Permutations, combinations, axioms"],
+#                 ["Tuesday", "7:00-9:00 PM", "Problem-Solving", "Probability Concepts: Sample spaces, independence, events"],
+#                 ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Random Variables & Distributions: Discrete (Bernoulli, Binomial) and Continuous (Uniform, Exponential)"],
+#                 ["Thursday", "7:00-9:00 PM", "Practice & Exercises", "Statistical Inference: Conditional probability, Bayes' theorem"],
+#                 ["Friday", "7:00-9:00 PM", "Recap & Quiz", "Review: CLT, confidence intervals, z-test, t-test, chi-squared test"],
+#                 ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Session on key problem areas in probability/statistics"],
+#                 ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "Advanced Topics: In-depth derivations and optimization techniques"],
+#                 ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Practice: Challenging problems and test-style questions"],
+#                 ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Combined exercises and review"],
+#                 ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Assessment: Timed tests with detailed error analysis"]
+#             ]
+#         },
+#         "Phase 3": {
+#             "title": "Programming, Data Structures, Algorithms & Database Management (Months 5–7)",
+#             "focus": "Python programming, core data structures and algorithms, and database management fundamentals, with supplementary Go Classes sessions for coding and database concepts.",
+#             "table": [
+#                 ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
+#                 ["Monday", "7:00-9:00 PM", "Theory Lecture", "Python Programming & Basic Data Structures: Syntax, data types, stacks, queues"],
+#                 ["Tuesday", "7:00-9:00 PM", "Coding Practice", "Data Structures: Implementation of linked lists, arrays, etc."],
+#                 ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Algorithms: Search algorithms (linear, binary) and basic sorting"],
+#                 ["Thursday", "7:00-9:00 PM", "Problem-Solving", "Hands-On: Coding exercises on trees, hash tables, etc."],
+#                 ["Friday", "7:00-9:00 PM", "Recap & Quiz", "Review: Quick quizzes and conceptual coding reviews"],
+#                 ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Live session on coding challenges and database queries"],
+#                 ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "Database Management: ER-model, relational algebra, SQL, normalization"],
+#                 ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Practice: Hands-on coding and SQL query practices"],
+#                 ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Combined coding challenges and algorithm problem sets"],
+#                 ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Assessment: Full-length tests with detailed walkthroughs"]
+#             ]
+#         },
+#         "Phase 4": {
+#             "title": "Machine Learning & Artificial Intelligence (Months 8–10)",
+#             "focus": "Supervised & unsupervised machine learning techniques and AI fundamentals, with interactive Go Classes sessions on advanced ML/AI topics.",
+#             "table": [
+#                 ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
+#                 ["Monday", "7:00-9:00 PM", "Theory Lecture", "Supervised Learning: Regression (simple, multiple, ridge) & Classification (logistic, SVM, etc.)"],
+#                 ["Tuesday", "7:00-9:00 PM", "Practical Implementation", "Supervised Learning: Python coding (k-nearest neighbors, decision trees)"],
+#                 ["Wednesday", "7:00-9:00 PM", "Theory Lecture", "Neural Networks: Fundamentals of MLP and feed-forward architecture"],
+#                 ["Thursday", "7:00-9:00 PM", "Coding Practice", "Unsupervised Learning: Clustering (k-means, hierarchical) and PCA implementations"],
+#                 ["Friday", "7:00-9:00 PM", "Recap & Quiz", "Review: Bias-variance, cross-validation, and key ML/AI concepts"],
+#                 ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Interactive session on ML/AI problem solving"],
+#                 ["Saturday", "10:00 AM-12:00 PM", "Deep Study Session", "Artificial Intelligence: Search strategies, logic, reasoning under uncertainty"],
+#                 ["Saturday", "1:00-4:00 PM", "Intensive Problem Solving", "Practice: Case studies and sample problems on ML/AI algorithms"],
+#                 ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Mixed Topics: Comprehensive exercises integrating ML/AI concepts"],
+#                 ["Sunday", "1:00-5:00 PM", "Mock Test & Revision", "Assessment: Full-length mock tests with in-depth error analysis"]
+#             ]
+#         },
+#         "Phase 5": {
+#             "title": "Revision, Practice & Mock Tests (Months 11–12)",
+#             "focus": "Comprehensive revision of all subjects with intensive practice, mock tests, and error analysis. Final Go Classes sessions polish exam strategies.",
+#             "table": [
+#                 ["Day", "Time Slot", "Activity & Go Classes Integration", "Subject Focus & Details"],
+#                 ["Monday", "7:00-9:00 PM", "Revision Session", "Quick review of Calculus, Linear Algebra, Discrete Math"],
+#                 ["Tuesday", "7:00-9:00 PM", "Revision & Practice", "Probability & Statistics: Key formulas and targeted problems"],
+#                 ["Wednesday", "7:00-9:00 PM", "Revision Session", "Programming & Algorithms: Code review and challenging problem solving"],
+#                 ["Thursday", "7:00-9:00 PM", "Revision & Practice", "Database Management: SQL queries, normalization, ER-model refresh"],
+#                 ["Friday", "7:00-9:00 PM", "Mixed Revision & Quiz", "Machine Learning & AI: Quick quizzes and concept reviews"],
+#                 ["Saturday", "9:00-10:00 AM", "Go Classes Live Session", "Final review and strategy session"],
+#                 ["Saturday", "10:00 AM-12:00 PM", "Full-Length Mock Test", "Simulated exam covering the entire syllabus"],
+#                 ["Saturday", "1:00-4:00 PM", "Error Analysis & Revision", "Detailed review of mistakes and focus on weak areas"],
+#                 ["Sunday", "9:00-12:00 PM", "Integrated Practice", "Combined problem sets for speed and accuracy"],
+#                 ["Sunday", "1:00-5:00 PM", "Final Revision & Strategy", "Overall preparation: Strategy session, key summaries, and Q&A review"]
+#             ]
+#         },
+#         "General Aptitude": {
+#             "title": "General Aptitude",
+#             "focus": "Quantitative, Logical, and Verbal skills",
+#             "table": [
+#                 ["Monday", "5:00-6:00 PM", "Practice", "Quantitative problems"],
+#                 ["Wednesday", "5:00-6:00 PM", "Practice", "Logical reasoning puzzles"],
+#                 ["Friday", "5:00-6:00 PM", "Practice", "Verbal ability and reading comprehension"]
+#             ]
+#         }
+#     }
     
-    for phase, details in default_phases.items():
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM schedule WHERE phase = ?", (phase,))
-        if c.fetchone()[0] == 0:
-            c.execute("""
-                INSERT INTO schedule (phase, title, focus, schedule_json)
-                VALUES (?, ?, ?, ?)
-            """, (phase, details["title"], details["focus"], json.dumps(details["table"])))
-    conn.commit()
-    conn.close()
+#     for phase, details in default_phases.items():
+#         c = conn.cursor()
+#         c.execute("SELECT COUNT(*) FROM schedule WHERE phase = ?", (phase,))
+#         if c.fetchone()[0] == 0:
+#             c.execute("""
+#                 INSERT INTO schedule (phase, title, focus, schedule_json)
+#                 VALUES (?, ?, ?, ?)
+#             """, (phase, details["title"], details["focus"], json.dumps(details["table"])))
+#     conn.commit()
+#     conn.close()
 
-init_db()  # Initialize database/tables
+# init_db()  # Initialize database/tables
 
 # -----------------------
 # 2. Database CRUD Helpers
