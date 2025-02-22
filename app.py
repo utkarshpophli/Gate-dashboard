@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS revision_notes (
 def init_db():
     """Initializes the Supabase database by creating tables and inserting default schedule data."""
     try:
-        conn = get_db_connection()
+        # conn = get_db_connection()
         # Create tables
         conn.execute(text(CREATE_TABLES_SQL))
         
