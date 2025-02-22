@@ -1,5 +1,5 @@
-numpy>=1.24,<1.25
-pandas>=2.2,<2.3
+numpy>=1.26.0
+pandas>=2.2.0
 plotly==5.15.0
 streamlit
 python-dotenv==1.0.0
