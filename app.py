@@ -21,8 +21,11 @@ from azure.ai.inference.models import (
     ImageDetailLevel
 )
 from azure.core.credentials import AzureKeyCredential
+from supabase import create_client, Client
 
 load_dotenv()
+engine = sqlalchemy.create_engine(DATABASE_URL)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Optional: for PDF and image text extraction
 try:
@@ -42,14 +45,67 @@ except ImportError:
 
 DB_FILE = "data_hub.db"
 
-def get_db_connection():
-    # Retrieve the Supabase Postgres connection string from Streamlit secrets
-    DATABASE_URL = st.secrets["DATABASE_URL"]
-    # Create the SQLAlchemy engine
-    engine = sqlalchemy.create_engine(DATABASE_URL)
-    # Establish and return a connection
-    connection = engine.connect()
-    return connection
+CREATE_TABLES_SQL = """
+-- Create progress_logs table
+CREATE TABLE IF NOT EXISTS progress_logs (
+    id SERIAL PRIMARY KEY,
+    date TEXT NOT NULL,
+    phase TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    hours REAL NOT NULL,
+    notes TEXT
+);
+
+-- Create schedule table
+CREATE TABLE IF NOT EXISTS schedule (
+    phase TEXT PRIMARY KEY,
+    title TEXT,
+    focus TEXT,
+    schedule_json TEXT
+);
+
+-- Create question_bank table
+CREATE TABLE IF NOT EXISTS question_bank (
+    id SERIAL PRIMARY KEY,
+    subject TEXT NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT
+);
+
+-- Create resources table
+CREATE TABLE IF NOT EXISTS resources (
+    id SERIAL PRIMARY KEY,
+    subject TEXT,
+    title TEXT,
+    link TEXT,
+    filename TEXT
+);
+
+-- Create study_goals table
+CREATE TABLE IF NOT EXISTS study_goals (
+    id SERIAL PRIMARY KEY,
+    description TEXT,
+    target_hours REAL,
+    achieved_hours REAL
+);
+
+-- Create revision_notes table
+CREATE TABLE IF NOT EXISTS revision_notes (
+    id SERIAL PRIMARY KEY,
+    subject TEXT NOT NULL,
+    short_notes TEXT,
+    formula TEXT
+);
+"""
+
+def init_db():
+    """Initializes the Supabase database by creating tables if they do not exist."""
+    try:
+        with engine.connect() as connection:
+            connection.execute(sqlalchemy.text(CREATE_TABLES_SQL))
+        st.success("Database initialized successfully! Tables created (if not already present).")
+    except Exception as e:
+        st.error(f"Error initializing database: {e}")
 
 def init_db():
     conn = get_db_connection()
@@ -226,109 +282,109 @@ init_db()  # Initialize database/tables
 # -----------------------
 
 def insert_progress_log(date_str, phase, subject, hours, notes):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("INSERT INTO progress_logs (date, phase, subject, hours, notes) VALUES (?, ?, ?, ?, ?)",
-              (date_str, phase, subject, hours, notes))
-    conn.commit()
-    conn.close()
+    data = {
+        "date": date_str,
+        "phase": phase,
+        "subject": subject,
+        "hours": hours,
+        "notes": notes
+    }
+    result = supabase.table("progress_logs").insert(data).execute()
+    if result.error:
+        st.error(f"Error inserting progress log: {result.error}")
 
 def get_progress_logs():
-    conn = get_db_connection()
-    c = conn.cursor()
-    logs = c.execute("SELECT * FROM progress_logs ORDER BY date").fetchall()
-    conn.close()
-    return logs
+    result = supabase.table("progress_logs").select("*").execute()
+    if result.error:
+        st.error(f"Error fetching logs: {result.error}")
+        return []
+    return result.data
 
 def update_schedule_db(phase, new_table):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("UPDATE schedule SET schedule_json = ? WHERE phase = ?",
-              (json.dumps(new_table), phase))
-    conn.commit()
-    conn.close()
+    data = {"schedule_json": json.dumps(new_table)}
+    result = supabase.table("schedule").update(data).eq("phase", phase).execute()
+    if result.error:
+        st.error(f"Error updating schedule: {result.error}")
 
 def get_all_schedules():
-    conn = get_db_connection()
-    c = conn.cursor()
-    rows = c.execute("SELECT * FROM schedule").fetchall()
-    conn.close()
+    result = supabase.table("schedule").select("*").execute()
+    if result.error:
+        st.error(f"Error fetching schedules: {result.error}")
+        return {}
     schedules = {}
-    for row in rows:
+    for row in result.data:
         schedules[row["phase"]] = {
             "title": row["title"],
             "focus": row["focus"],
-            "table": json.loads(row["schedule_json"])
+            "table": json.loads(row["schedule_json"]) if row["schedule_json"] else []
         }
     return schedules
 
 def insert_question(subject, question, answer):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("INSERT INTO question_bank (subject, question, answer) VALUES (?, ?, ?)",
-              (subject, question, answer))
-    conn.commit()
-    conn.close()
+    data = {"subject": subject, "question": question, "answer": answer}
+    result = supabase.table("question_bank").insert(data).execute()
+    if result.error:
+        st.error(f"Error inserting question: {result.error}")
 
 def get_all_questions():
-    conn = get_db_connection()
-    c = conn.cursor()
-    questions = c.execute("SELECT * FROM question_bank").fetchall()
-    conn.close()
-    return questions
+    result = supabase.table("question_bank").select("*").execute()
+    if result.error:
+        st.error(f"Error fetching questions: {result.error}")
+        return []
+    return result.data
 
 def insert_resource(subject, title, link, filename):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("INSERT INTO resources (subject, title, link, filename) VALUES (?, ?, ?, ?)",
-              (subject, title, link, filename))
-    conn.commit()
-    conn.close()
+    data = {"subject": subject, "title": title, "link": link, "filename": filename}
+    result = supabase.table("resources").insert(data).execute()
+    if result.error:
+        st.error(f"Error inserting resource: {result.error}")
 
 def get_all_resources():
-    conn = get_db_connection()
-    c = conn.cursor()
-    resources = c.execute("SELECT * FROM resources").fetchall()
-    conn.close()
-    return resources
+    result = supabase.table("resources").select("*").execute()
+    if result.error:
+        st.error(f"Error fetching resources: {result.error}")
+        return []
+    return result.data
 
 def insert_study_goal(description, target_hours, achieved_hours=0):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("INSERT INTO study_goals (description, target_hours, achieved_hours) VALUES (?, ?, ?)",
-              (description, target_hours, achieved_hours))
-    conn.commit()
-    conn.close()
+    data = {"description": description, "target_hours": target_hours, "achieved_hours": achieved_hours}
+    result = supabase.table("study_goals").insert(data).execute()
+    if result.error:
+        st.error(f"Error inserting study goal: {result.error}")
 
 def get_study_goals():
-    conn = get_db_connection()
-    c = conn.cursor()
-    goals = c.execute("SELECT * FROM study_goals").fetchall()
-    conn.close()
-    return goals
+    result = supabase.table("study_goals").select("*").execute()
+    if result.error:
+        st.error(f"Error fetching study goals: {result.error}")
+        return []
+    return result.data
 
 def update_goal_achievement(goal_id, additional_hours):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("UPDATE study_goals SET achieved_hours = achieved_hours + ? WHERE id = ?",
-              (additional_hours, goal_id))
-    conn.commit()
-    conn.close()
+    # Since Supabase doesn't support arithmetic updates directly, fetch current value first.
+    goals = get_study_goals()
+    current = None
+    for g in goals:
+        if g["id"] == goal_id:
+            current = g["achieved_hours"]
+            break
+    if current is not None:
+        new_val = current + additional_hours
+        result = supabase.table("study_goals").update({"achieved_hours": new_val}).eq("id", goal_id).execute()
+        if result.error:
+            st.error(f"Error updating goal: {result.error}")
 
 def insert_revision_note(subject, short_notes, formula):
-    conn = get_db_connection()
-    c = conn.cursor()
-    c.execute("INSERT INTO revision_notes (subject, short_notes, formula) VALUES (?, ?, ?)",
-              (subject, short_notes, formula))
-    conn.commit()
-    conn.close()
+    data = {"subject": subject, "short_notes": short_notes, "formula": formula}
+    result = supabase.table("revision_notes").insert(data).execute()
+    if result.error:
+        st.error(f"Error inserting revision note: {result.error}")
 
 def get_revision_notes():
-    conn = get_db_connection()
-    c = conn.cursor()
-    notes = c.execute("SELECT * FROM revision_notes").fetchall()
-    conn.close()
-    return notes
+    result = supabase.table("revision_notes").select("*").execute()
+    if result.error:
+        st.error(f"Error fetching revision notes: {result.error}")
+        return []
+    return result.data
 
 # ------------------------
 # 3. Global Lists for Dropdowns
@@ -732,7 +788,6 @@ def get_and_verify_token():
     Verifies the token by sending a minimal test request using a lightweight model.
     If verified, stores it in session_state and returns the token.
     """
-    # If a token is already stored in session state, use it.
     if "token" in st.session_state and st.session_state.token:
         return st.session_state.token
 
@@ -740,7 +795,6 @@ def get_and_verify_token():
     if token_input:
         with st.spinner("Verifying token..."):
             try:
-                # Use a lightweight model (o3-mini) for a simple test
                 test_client = ChatCompletionsClient(
                     endpoint="https://models.inference.ai.azure.com",
                     credential=AzureKeyCredential(token_input),
@@ -755,7 +809,6 @@ def get_and_verify_token():
                     top_p=1.0,
                     model="o3-mini"
                 )
-                # If no exception, token is valid.
                 st.success("Token verified successfully!")
                 st.session_state.token = token_input
                 return token_input
@@ -768,13 +821,11 @@ def rag_assistant_page():
     st.title("RAG Assistant")
     st.subheader("Ask for subject/topic questions and revision points – all through a prompt!")
     
-    # Let the user select a subject
     selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
     
-    # Optional: File upload for additional revision resources (PDF/Image)
     st.markdown("#### Upload Revision Resource (PDF or Image)")
     uploaded_file = st.file_uploader("Upload a file", type=["pdf", "png", "jpg", "jpeg"], key="rag_resource")
-    additional_messages = []  # List to hold any extra messages for the model
+    additional_messages = []
     
     if uploaded_file:
         upload_folder = "uploads"
@@ -788,7 +839,6 @@ def rag_assistant_page():
         ext = uploaded_file.name.split('.')[-1].lower()
         if ext in ["png", "jpg", "jpeg"]:
             try:
-                # Create an image message using Azure AI Inference's types
                 image_url = ImageUrl.load(
                     image_file=file_path,
                     image_format=ext,
@@ -798,12 +848,9 @@ def rag_assistant_page():
             except Exception as e:
                 st.error(f"Error processing image: {e}")
         elif ext == "pdf":
-            # Attempt to extract text using your OCR function
             extracted_text = extract_text_from_file(file_path)
-            # Define a list of keywords expected for relevance (e.g., for Linear Algebra)
             expected_keywords = ['linear algebra', 'matrix', 'vector', 'eigen']
             if not any(keyword in extracted_text.lower() for keyword in expected_keywords):
-                # If text extraction is insufficient, instruct the model to use its vision model
                 additional_messages.append(
                     UserMessage("The extracted text from the PDF is insufficient or not relevant. Please apply your vision model to analyze the document visually and extract key data (such as diagrams, tables, or section headings) that are pertinent to the subject.")
                 )
@@ -812,10 +859,8 @@ def rag_assistant_page():
                     UserMessage(f"Extracted text from PDF: {extracted_text}")
                 )
     
-    # Build retrieval context from your database (e.g., revision notes, Q&A, etc.)
     retrieval_context = get_rag_context(selected_subject)
     
-    # Build the prompt message combining retrieval context and user query placeholder
     prompt_text = (
         f"You are an expert revision assistant for the GATE exam.\n"
         f"Subject: {selected_subject}\n"
@@ -825,7 +870,6 @@ def rag_assistant_page():
     user_query = st.text_input("Enter your query (e.g., 'Give me daily revision points for Calculus'):")
     
     if user_query:
-        # Prepare the message sequence to send to the model
         messages = [
             SystemMessage(prompt_text),
             UserMessage(user_query)
@@ -833,13 +877,11 @@ def rag_assistant_page():
         if additional_messages:
             messages.extend(additional_messages)
         
-        # Retrieve your GitHub token (PAT) from the environment
         token = get_and_verify_token()
         if not token:
-            st.error("GitHub token not found in environment variables.")
+            st.error("Please provide a valid GitHub token to proceed.")
             return
         
-        # Configure the client for the RAG model (Llama-3.2-90B-Vision-Instruct)
         endpoint = "https://models.inference.ai.azure.com"
         model_name = "Llama-3.2-90B-Vision-Instruct"
         
@@ -867,13 +909,11 @@ def chat_assistant_page():
     st.title("Chat Assistant")
     st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
     
-    # Token input/verification for chat
     token = get_and_verify_token()
     if not token:
         st.warning("Please enter and verify your GitHub token above to start chatting.")
         return
     
-    # Initialize or display chat history
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
@@ -885,7 +925,6 @@ def chat_assistant_page():
         st.session_state.chat_history.append({"role": "user", "content": user_input})
         st.chat_message("user").write(user_input)
         
-        # Build conversation messages (system prompt + history)
         messages = [SystemMessage("You are a helpful assistant who knows about my study sessions.")]
         for entry in st.session_state.chat_history:
             if entry["role"] == "user":
@@ -893,7 +932,6 @@ def chat_assistant_page():
             else:
                 messages.append(AssistantMessage(entry["content"]))
         
-        # Configure the client for the chat model (o3-mini)
         endpoint = "https://models.inference.ai.azure.com"
         model_name = "o3-mini"
         
