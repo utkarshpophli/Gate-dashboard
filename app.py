@@ -612,11 +612,16 @@ def insert_revision_note(subject, short_notes, formula):
         st.error(f"Error inserting revision note: {result.error}")
 
 def get_revision_notes():
-    result = supabase.table("revision_notes").select("*").execute()
-    if result.error:
-        st.error(f"Error fetching revision notes: {result.error}")
+    """
+    Retrieves all revision notes from the database.
+    Returns a list of notes or empty list if none found.
+    """
+    try:
+        response = supabase.table("revision_notes").select("*").execute()
+        return response.data if hasattr(response, 'data') else []
+    except Exception as e:
+        st.error(f"Error fetching revision notes: {str(e)}")
         return []
-    return result.data
 
 def get_progress_logs_for_report():
     """Retrieves all progress logs with additional analytics for reporting."""
@@ -668,32 +673,51 @@ def extract_text_from_file(file_path):
     return extracted_text
 
 def get_rag_context(selected_subject):
-    """Combine text from question bank, revision notes, and resources for a given subject."""
+    """
+    Combine text from question bank, revision notes, and resources for a given subject.
+    """
     context_parts = []
-    # Questions from question bank
-    questions = get_all_questions()
-    subject_questions = [q for q in questions if q["subject"].lower() == selected_subject.lower()]
-    if subject_questions:
-        q_text = "\n".join([f"Q: {q['question']}\nA: {q['answer'] if q['answer'] else 'No answer provided'}" 
-                             for q in subject_questions])
-        context_parts.append("Question Bank:\n" + q_text)
     
-    # Revision notes
-    notes = get_revision_notes()
-    subject_notes = [n for n in notes if n["subject"].lower() == selected_subject.lower()]
-    if subject_notes:
-        n_text = "\n".join([f"Note: {n['short_notes']}\nFormula: {n['formula']}" for n in subject_notes])
-        context_parts.append("Revision Notes:\n" + n_text)
+    try:
+        # Questions from question bank
+        questions = get_all_questions()
+        subject_questions = [q for q in questions if q["subject"].lower() == selected_subject.lower()]
+        if subject_questions:
+            q_text = "\n".join([
+                f"Q: {q['question']}\nA: {q['answer'] if q['answer'] else 'No answer provided'}" 
+                for q in subject_questions
+            ])
+            context_parts.append("Question Bank:\n" + q_text)
+        
+        # Revision notes
+        notes = get_revision_notes()
+        subject_notes = [n for n in notes if n["subject"].lower() == selected_subject.lower()]
+        if subject_notes:
+            n_text = "\n".join([
+                f"Note: {n['short_notes']}\nFormula: {n['formula']}" 
+                for n in subject_notes
+            ])
+            context_parts.append("Revision Notes:\n" + n_text)
+        
+        # Resources (uploaded PDFs/images)
+        resources = get_all_resources()
+        subject_resources = [
+            r for r in resources 
+            if r["subject"] and r["subject"].lower() == selected_subject.lower() 
+            and r["filename"]
+        ]
+        
+        for r in subject_resources:
+            if os.path.exists(r["filename"]):
+                extracted = extract_text_from_file(r["filename"])
+                if extracted:
+                    context_parts.append(f"Resource ({r['title']}):\n" + extracted)
+        
+        return "\n\n".join(context_parts)
     
-    # Resources (uploaded PDFs/images)
-    resources = get_all_resources()
-    subject_resources = [r for r in resources if r["subject"] and r["subject"].lower() == selected_subject.lower() and r["filename"]]
-    for r in subject_resources:
-        extracted = extract_text_from_file(r["filename"])
-        if extracted:
-            context_parts.append(f"Resource ({r['title']}):\n" + extracted)
-    
-    return "\n\n".join(context_parts)
+    except Exception as e:
+        st.error(f"Error building RAG context: {str(e)}")
+        return ""
 
 # ------------------------
 # 5. Streamlit App Pages
@@ -1526,84 +1550,108 @@ def rag_assistant_page():
     selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
     
     st.markdown("#### Upload Revision Resource (PDF or Image)")
-    uploaded_file = st.file_uploader("Upload a file", type=["pdf", "png", "jpg", "jpeg"], key="rag_resource")
+    uploaded_file = st.file_uploader(
+        "Upload a file", 
+        type=["pdf", "png", "jpg", "jpeg"], 
+        key="rag_resource"
+    )
+    
     additional_messages = []
     
     if uploaded_file:
-        upload_folder = "uploads"
-        if not os.path.exists(upload_folder):
-            os.makedirs(upload_folder)
-        file_path = os.path.join(upload_folder, uploaded_file.name)
-        with open(file_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-        st.success("Resource uploaded!")
-        
-        ext = uploaded_file.name.split('.')[-1].lower()
-        if ext in ["png", "jpg", "jpeg"]:
-            try:
-                image_url = ImageUrl.load(
-                    image_file=file_path,
-                    image_format=ext,
-                    detail=ImageDetailLevel.LOW
-                )
-                additional_messages.append(ImageContentItem(image_url=image_url))
-            except Exception as e:
-                st.error(f"Error processing image: {e}")
-        elif ext == "pdf":
-            extracted_text = extract_text_from_file(file_path)
-            expected_keywords = ['linear algebra', 'matrix', 'vector', 'eigen']
-            if not any(keyword in extracted_text.lower() for keyword in expected_keywords):
-                additional_messages.append(
-                    UserMessage("The extracted text from the PDF is insufficient or not relevant. Please apply your vision model to analyze the document visually and extract key data (such as diagrams, tables, or section headings) that are pertinent to the subject.")
-                )
-            else:
-                additional_messages.append(
-                    UserMessage(f"Extracted text from PDF: {extracted_text}")
-                )
+        try:
+            # Create uploads directory if it doesn't exist
+            upload_folder = "uploads"
+            os.makedirs(upload_folder, exist_ok=True)
+            
+            # Save uploaded file
+            file_path = os.path.join(upload_folder, uploaded_file.name)
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+            
+            st.success("Resource uploaded successfully!")
+            
+            # Process file based on type
+            ext = uploaded_file.name.split('.')[-1].lower()
+            if ext in ["png", "jpg", "jpeg"]:
+                try:
+                    image_url = ImageUrl.load(
+                        image_file=file_path,
+                        image_format=ext,
+                        detail=ImageDetailLevel.LOW
+                    )
+                    additional_messages.append(ImageContentItem(image_url=image_url))
+                except Exception as e:
+                    st.error(f"Error processing image: {str(e)}")
+                    
+            elif ext == "pdf":
+                extracted_text = extract_text_from_file(file_path)
+                if extracted_text:
+                    additional_messages.append(
+                        UserMessage(f"Extracted text from PDF: {extracted_text}")
+                    )
+                else:
+                    st.warning("No text could be extracted from the PDF.")
+                    
+        except Exception as e:
+            st.error(f"Error handling uploaded file: {str(e)}")
     
+    # Get context for RAG
     retrieval_context = get_rag_context(selected_subject)
     
+    # Prepare prompt
     prompt_text = (
         f"You are an expert revision assistant for the GATE exam.\n"
         f"Subject: {selected_subject}\n"
         f"Retrieved Context:\n{retrieval_context}\n"
         f"User Query: "
     )
-    user_query = st.text_input("Enter your query (e.g., 'Give me daily revision points for Calculus'):")
+    
+    # Get user query
+    user_query = st.text_input(
+        "Enter your query (e.g., 'Give me daily revision points for Calculus'):"
+    )
     
     if user_query:
-        messages = [
-            SystemMessage(prompt_text),
-            UserMessage(user_query)
-        ]
-        if additional_messages:
-            messages.extend(additional_messages)
-        
+        # Verify token
         token = get_and_verify_token()
         if not token:
             st.error("Please provide a valid GitHub token to proceed.")
             return
         
-        endpoint = "https://models.inference.ai.azure.com"
-        model_name = "Llama-3.2-90B-Vision-Instruct"
-        
-        client = ChatCompletionsClient(
-            endpoint=endpoint,
-            credential=AzureKeyCredential(token),
-            api_version="2024-12-01-preview"
-        )
-        
-        with st.spinner("Generating response..."):
-            try:
+        try:
+            # Prepare messages
+            messages = [
+                SystemMessage(prompt_text),
+                UserMessage(user_query)
+            ]
+            messages.extend(additional_messages)
+            
+            # Create client
+            client = ChatCompletionsClient(
+                endpoint="https://models.inference.ai.azure.com",
+                credential=AzureKeyCredential(token),
+                api_version="2024-12-01-preview"
+            )
+            
+            # Get response
+            with st.spinner("Generating response..."):
                 response = client.complete(
                     messages=messages,
-                    model=model_name
+                    temperature=0.7,
+                    top_p=0.95,
+                    model="Llama-3.2-90B-Vision-Instruct"
                 )
-                rag_reply = response.choices[0].message.content
-                st.markdown("### RAG Assistant Response")
-                st.markdown(rag_reply)
-            except Exception as e:
-                st.error(f"Error generating response: {e}")
+                
+                if hasattr(response.choices[0].message, 'content'):
+                    rag_reply = response.choices[0].message.content
+                    st.markdown("### RAG Assistant Response")
+                    st.markdown(rag_reply)
+                else:
+                    st.error("No response content received from the model.")
+                    
+        except Exception as e:
+            st.error(f"Error generating response: {str(e)}")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
