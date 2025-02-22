@@ -25,6 +25,8 @@ from supabase import create_client, Client
 
 load_dotenv()
 # engine = sqlalchemy.create_engine(DATABASE_URL)
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Optional: for PDF and image text extraction
