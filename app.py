@@ -1597,7 +1597,6 @@ def rag_assistant_page():
             try:
                 response = client.complete(
                     messages=messages,
-                    top_p=1.0,
                     model=model_name
                 )
                 rag_reply = response.choices[0].message.content
@@ -1658,7 +1657,6 @@ def chat_assistant_page():
             with st.spinner("Thinking..."):
                 response = client.complete(
                     messages=messages,
-                    top_p=0.95,
                     model="o3-mini"
                 )
                 
