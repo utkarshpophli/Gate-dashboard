@@ -25,12 +25,17 @@ from azure.ai.inference.models import (
 from azure.core.credentials import AzureKeyCredential
 from supabase import create_client, Client
 
+AZURE_ENDPOINT = "https://models.inference.ai.azure.com"
+AZURE_API_KEY = st.secrets["AZURE_API_KEY"]  # Replace with your actual API key
+API_VERSION = "2024-12-01-preview"
+
 load_dotenv()
-# engine = sqlalchemy.create_engine(DATABASE_URL)
+
 supabase: Client = create_client(
     supabase_url=st.secrets["SUPABASE_URL"],
     supabase_key=st.secrets["SUPABASE_KEY"]
 )
+
 st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
 
 # Optional: for PDF and image text extraction
@@ -1501,6 +1506,14 @@ def get_and_verify_token():
                 return None
     return None
 
+def get_chat_client():
+    """Returns a configured chat client."""
+    return ChatCompletionsClient(
+        endpoint=AZURE_ENDPOINT,
+        credential=AzureKeyCredential(AZURE_API_KEY),
+        api_version=API_VERSION
+    )
+    
 def rag_assistant_page():
     st.title("RAG Assistant")
     st.subheader("Ask for subject/topic questions and revision points – all through a prompt!")
@@ -1536,7 +1549,7 @@ def rag_assistant_page():
             expected_keywords = ['linear algebra', 'matrix', 'vector', 'eigen']
             if not any(keyword in extracted_text.lower() for keyword in expected_keywords):
                 additional_messages.append(
-                    UserMessage("The extracted text from the PDF is insufficient or not relevant. Please apply your vision model to analyze the document visually and extract key data (such as diagrams, tables, or section headings) that are pertinent to the subject.")
+                    UserMessage("The extracted text from the PDF is insufficient or not relevant. Please analyze the document visually and extract key data.")
                 )
             else:
                 additional_messages.append(
@@ -1561,19 +1574,7 @@ def rag_assistant_page():
         if additional_messages:
             messages.extend(additional_messages)
         
-        token = get_and_verify_token()
-        if not token:
-            st.error("Please provide a valid GitHub token to proceed.")
-            return
-        
-        endpoint = "https://models.inference.ai.azure.com"
-        model_name = "Llama-3.2-90B-Vision-Instruct"
-        
-        client = ChatCompletionsClient(
-            endpoint=endpoint,
-            credential=AzureKeyCredential(token),
-            api_version="2024-12-01-preview"
-        )
+        client = get_chat_client()
         
         with st.spinner("Generating response..."):
             try:
@@ -1581,22 +1582,17 @@ def rag_assistant_page():
                     messages=messages,
                     temperature=1.0,
                     top_p=1.0,
-                    model=model_name
+                    model="Llama-3.2-90B-Vision-Instruct"
                 )
                 rag_reply = response.choices[0].message.content
                 st.markdown("### RAG Assistant Response")
                 st.markdown(rag_reply)
             except Exception as e:
-                st.error(f"Error generating response: {e}")
+                st.error(f"Error generating response: {str(e)}")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
-    st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
-    
-    token = get_and_verify_token()
-    if not token:
-        st.warning("Please enter and verify your GitHub token above to start chatting.")
-        return
+    st.subheader("Talk to your study data assistant!")
     
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
@@ -1616,14 +1612,7 @@ def chat_assistant_page():
             else:
                 messages.append(AssistantMessage(entry["content"]))
         
-        endpoint = "https://models.inference.ai.azure.com"
-        model_name = "o3-mini"
-        
-        client = ChatCompletionsClient(
-            endpoint=endpoint,
-            credential=AzureKeyCredential(token),
-            api_version="2024-12-01-preview"
-        )
+        client = get_chat_client()
         
         with st.spinner("Generating response..."):
             try:
@@ -1631,13 +1620,13 @@ def chat_assistant_page():
                     messages=messages,
                     temperature=1.0,
                     top_p=1.0,
-                    model=model_name
+                    model="o3-mini"
                 )
                 assistant_reply = response.choices[0].message.content
                 st.session_state.chat_history.append({"role": "assistant", "content": assistant_reply})
                 st.chat_message("assistant").write(assistant_reply)
             except Exception as e:
-                st.error(f"Error generating response: {e}")
+                st.error(f"Error generating response: {str(e)}")
 
 
 # ------------------------
