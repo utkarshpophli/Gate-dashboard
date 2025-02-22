@@ -52,7 +52,7 @@ def get_db_connection():
     Creates and returns a connection to your Supabase PostgreSQL database.
     The connection string should be stored in your Streamlit secrets as DATABASE_URL.
     """
-    DATABASE_URL = st.secrets["DATABASE_URL"]
+    DATABASE_URL = st.secrets["SUPERBASE_URL"]
     engine = create_engine(DATABASE_URL)
     return engine.connect()
 
