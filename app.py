@@ -686,7 +686,6 @@ def dashboard_page():
         
 def analytics_page():
     st.title("Progress Analytics")
-    st.subheader("Visualize Your Study Progress with Different Analyses")
     
     logs = get_progress_logs()
     if not logs:
@@ -694,79 +693,117 @@ def analytics_page():
         return
     
     # Convert logs to DataFrame and sort by date
-    df_logs = pd.DataFrame(logs, columns=logs[0].keys())
+    df_logs = pd.DataFrame(logs)
     df_logs["date"] = pd.to_datetime(df_logs["date"])
     df_logs.sort_values("date", inplace=True)
 
-    # Create a dropdown to select the type of analysis
-    analysis_options = ["Overall Progress", "By Subject", "By Week", "By Month", "By Phase"]
-    selected_analysis = st.selectbox("Select Analysis Type", analysis_options)
+    # Create tabs for different analysis views
+    tab1, tab2, tab3 = st.tabs(["Progress Summary", "Time Analysis", "Subject Analysis"])
+    
+    with tab1:
+        st.header("Progress Summary")
+        
+        # Overall statistics
+        total_hours = df_logs["hours"].sum()
+        total_days = len(df_logs["date"].unique())
+        avg_hours_per_day = total_hours / total_days if total_days > 0 else 0
+        
+        # Create summary metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Study Hours", f"{total_hours:.1f}")
+        with col2:
+            st.metric("Days Studied", total_days)
+        with col3:
+            st.metric("Avg Hours/Day", f"{avg_hours_per_day:.1f}")
+        
+        # Subject-wise summary table
+        st.subheader("Subject-wise Progress")
+        subject_summary = df_logs.groupby("subject").agg({
+            "hours": ["sum", "count"],
+            "date": "nunique"
+        }).reset_index()
+        subject_summary.columns = ["Subject", "Total Hours", "Sessions", "Days"]
+        subject_summary["Avg Hours/Session"] = subject_summary["Total Hours"] / subject_summary["Sessions"]
+        subject_summary = subject_summary.sort_values("Total Hours", ascending=False)
+        st.dataframe(subject_summary.round(2))
 
-    if selected_analysis == "Overall Progress":
-        st.markdown("### Cumulative Hours Over Time")
-        df_logs["cumulative_hours"] = df_logs["hours"].cumsum()
-        st.line_chart(df_logs.set_index("date")["cumulative_hours"])
-
-        st.markdown("### Study Hours by Weekday")
-        df_logs["weekday"] = df_logs["date"].dt.day_name()
-        order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-        weekday_hours = df_logs.groupby("weekday")["hours"].sum().reindex(order).reset_index()
-        fig_bar = px.bar(
-            weekday_hours,
-            x="weekday",
-            y="hours",
-            title="Hours Studied per Weekday"
+    with tab2:
+        st.header("Time Analysis")
+        
+        # Analysis type selector
+        time_analysis = st.selectbox(
+            "Select Time Analysis",
+            ["Daily Trend", "Weekly Pattern", "Monthly Progress", "Cumulative Progress"]
         )
-        st.plotly_chart(fig_bar)
+        
+        if time_analysis == "Daily Trend":
+            # Daily study hours
+            daily_hours = df_logs.groupby("date")["hours"].sum().reset_index()
+            fig = px.line(daily_hours, x="date", y="hours",
+                         title="Daily Study Hours",
+                         labels={"hours": "Hours", "date": "Date"})
+            st.plotly_chart(fig)
+            
+        elif time_analysis == "Weekly Pattern":
+            # Weekly pattern
+            df_logs["weekday"] = df_logs["date"].dt.day_name()
+            weekly_hours = df_logs.groupby("weekday")["hours"].agg(["sum", "mean"]).reset_index()
+            weekly_hours.columns = ["Weekday", "Total Hours", "Average Hours"]
+            
+            # Ensure correct weekday order
+            weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+            weekly_hours["Weekday"] = pd.Categorical(weekly_hours["Weekday"], categories=weekday_order, ordered=True)
+            weekly_hours = weekly_hours.sort_values("Weekday")
+            
+            fig = px.bar(weekly_hours, x="Weekday", y="Average Hours",
+                        title="Average Study Hours by Weekday")
+            st.plotly_chart(fig)
+            
+        elif time_analysis == "Monthly Progress":
+            # Monthly progress
+            df_logs["month"] = df_logs["date"].dt.strftime("%Y-%m")
+            monthly_hours = df_logs.groupby("month")["hours"].sum().reset_index()
+            fig = px.bar(monthly_hours, x="month", y="hours",
+                        title="Monthly Study Hours")
+            st.plotly_chart(fig)
+            
+        else:  # Cumulative Progress
+            # Cumulative progress
+            df_logs["cumulative_hours"] = df_logs["hours"].cumsum()
+            fig = px.line(df_logs, x="date", y="cumulative_hours",
+                         title="Cumulative Study Hours")
+            st.plotly_chart(fig)
 
-    elif selected_analysis == "By Subject":
-        st.markdown("### Study Hours by Subject")
-        subject_hours = df_logs.groupby("subject")["hours"].sum().reset_index()
-        fig_subj = px.bar(
-            subject_hours,
-            x="subject",
-            y="hours",
-            title="Hours Studied by Subject"
-        )
-        st.plotly_chart(fig_subj)
-
-    elif selected_analysis == "By Week":
-        st.markdown("### Study Hours by Week (ISO Week Number)")
-        df_logs["week"] = df_logs["date"].dt.isocalendar().week
-        weekly_hours = df_logs.groupby("week")["hours"].sum().reset_index()
-        fig_week = px.line(
-            weekly_hours,
-            x="week",
-            y="hours",
-            title="Hours Studied by Week"
-        )
-        st.plotly_chart(fig_week)
-
-    elif selected_analysis == "By Month":
-        st.markdown("### Study Hours by Month")
-        # Convert date to a monthly period (YYYY-MM)
-        df_logs["month"] = df_logs["date"].dt.to_period("M")
-        monthly_hours = df_logs.groupby("month")["hours"].sum().reset_index()
-        # Convert period to string for plotting
-        monthly_hours["month"] = monthly_hours["month"].astype(str)
-        fig_month = px.bar(
-            monthly_hours,
-            x="month",
-            y="hours",
-            title="Hours Studied by Month"
-        )
-        st.plotly_chart(fig_month)
-
-    elif selected_analysis == "By Phase":
-        st.markdown("### Study Hours by Phase")
-        phase_hours = df_logs.groupby("phase")["hours"].sum().reset_index()
-        fig_pie = px.pie(
-            phase_hours,
-            names="phase",
-            values="hours",
-            title="Study Hours by Phase"
-        )
-        st.plotly_chart(fig_pie)
+    with tab3:
+        st.header("Subject Analysis")
+        
+        # Subject selection for detailed analysis
+        selected_subject = st.selectbox("Select Subject for Detailed Analysis", 
+                                      df_logs["subject"].unique())
+        
+        # Filter data for selected subject
+        subject_data = df_logs[df_logs["subject"] == selected_subject]
+        
+        # Subject metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Hours", f"{subject_data['hours'].sum():.1f}")
+        with col2:
+            st.metric("Number of Sessions", len(subject_data))
+        with col3:
+            avg_session = subject_data["hours"].mean()
+            st.metric("Avg Hours/Session", f"{avg_session:.1f}")
+        
+        # Progress over time for selected subject
+        fig = px.line(subject_data, x="date", y="hours",
+                     title=f"{selected_subject} - Study Hours Over Time")
+        st.plotly_chart(fig)
+        
+        # Session details table
+        st.subheader("Session Details")
+        session_details = subject_data[["date", "phase", "hours", "notes"]].sort_values("date", ascending=False)
+        st.dataframe(session_details)
 
 def study_planner_page():
     st.title("Study Planner")
