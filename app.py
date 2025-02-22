@@ -1597,7 +1597,6 @@ def rag_assistant_page():
             try:
                 response = client.complete(
                     messages=messages,
-                    temperature=1.0,
                     top_p=1.0,
                     model=model_name
                 )
@@ -1659,7 +1658,6 @@ def chat_assistant_page():
             with st.spinner("Thinking..."):
                 response = client.complete(
                     messages=messages,
-                    temperature=0.7,
                     top_p=0.95,
                     model="o3-mini"
                 )
