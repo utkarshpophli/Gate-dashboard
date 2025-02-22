@@ -1674,19 +1674,19 @@ def chat_assistant_page():
         except Exception as e:
             st.error(f"Error: {str(e)}")
 
-# At the start of your app
-if 'token' not in st.session_state:
-    st.session_state.token = None
+# # At the start of your app
+# if 'token' not in st.session_state:
+#     st.session_state.token = None
 
-# Add a function to clear token
-def clear_token():
-    st.session_state.token = None
-    st.session_state.chat_history = []
+# # Add a function to clear token
+# def clear_token():
+#     st.session_state.token = None
+#     st.session_state.chat_history = []
 
-# Add a button to clear token if needed
-if st.session_state.token:
-    if st.sidebar.button("Clear Token"):
-        clear_token()
+# # Add a button to clear token if needed
+# if st.session_state.token:
+#     if st.sidebar.button("Clear Token"):
+#         clear_token()
 # ------------------------
 # 6. Main App Navigation
 # ------------------------
