@@ -53,7 +53,7 @@ def get_db_connection():
     The connection string should be stored in your Streamlit secrets as DATABASE_URL.
     """
     DATABASE_URL = st.secrets["SUPABASE_URL"]
-    engine = create_engine(DATABASE_URL)
+    engine = sqlalchemy.create_engine(DATABASE_URL)
     return engine.connect()
 
 CREATE_TABLES_SQL = """
