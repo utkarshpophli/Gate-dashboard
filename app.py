@@ -220,11 +220,12 @@ def init_db():
         # Insert default schedule data if not already present
          # Insert default schedule data if not present
         # Insert default phases if they don't exist
+        # Check and insert default phases
         for phase, details in default_phases.items():
             # Check if phase exists
             existing = supabase.table("schedule").select("*").eq("phase", phase).execute()
             
-            if not existing.data:
+            if not existing.data:  # If phase doesn't exist, insert it
                 response = supabase.table("schedule").insert({
                     "phase": phase,
                     "title": details["title"],
@@ -232,16 +233,16 @@ def init_db():
                     "schedule_json": json.dumps(details["table"])
                 }).execute()
                 
-                if response.error:
-                    st.error(f"Error inserting phase {phase}: {response.error}")
-                    
+                if not hasattr(response, 'data'):
+                    st.error(f"Error inserting phase {phase}")
+        
         st.success("Database initialized successfully!")
         
     except Exception as e:
         st.error(f"Error initializing database: {str(e)}")
         
 # Initialize the database when the app starts
-init_db()
+# init_db()
         
 # def init_db():
 #     conn = get_db_connection()
@@ -443,11 +444,17 @@ def update_schedule_db(phase, new_table):
         st.error(f"Error updating schedule: {result.error}")
 
 def get_all_schedules():
-    """Retrieves all schedules from the database."""
+    """
+    Retrieves all schedules from the Supabase database
+    """
     try:
         response = supabase.table('schedule').select('*').execute()
+        
+        # Initialize empty schedules dictionary
         schedules = {}
-        if response.data:
+        
+        # Check if we have data in the response
+        if hasattr(response, 'data') and response.data:
             for row in response.data:
                 schedules[row['phase']] = {
                     'title': row['title'],
@@ -458,6 +465,7 @@ def get_all_schedules():
     except Exception as e:
         st.error(f"Error fetching schedules: {str(e)}")
         return {}
+        
 def insert_progress_log(date_str, phase, subject, hours, notes):
     """Inserts a new progress log."""
     try:
@@ -630,9 +638,10 @@ def dashboard_page():
     st.title("GATE DA 2026 Dashboard")
     st.subheader("Overview of Your Study Progress")
     
+    # Get schedules with error handling
     try:
         schedules = get_all_schedules()
-        phase_options = list(schedules.keys()) if schedules else ['Phase 1']
+        phase_options = list(schedules.keys()) if schedules else ['Phase 1']  # Provide default if empty
         
         with st.form("study_session_form"):
             session_date = st.date_input("Date", datetime.date.today())
@@ -643,31 +652,37 @@ def dashboard_page():
             submitted = st.form_submit_button("Log Session")
             
             if submitted:
-                date_str = session_date.strftime("%Y-%m-%d")
-                if insert_progress_log(date_str, selected_phase, selected_subject, hours, notes):
-                    st.success("Study session logged successfully!")
-        
-        # Display existing logs
-        logs = get_progress_logs()
-        if logs:
-            st.header("Study Sessions Log")
-            df_logs = pd.DataFrame(logs)
-            st.dataframe(df_logs)
-        else:
-            st.info("No study sessions logged yet.")
-            
+                try:
+                    date_str = session_date.strftime("%Y-%m-%d")
+                    # Insert using Supabase client
+                    response = supabase.table('progress_logs').insert({
+                        'date': date_str,
+                        'phase': selected_phase,
+                        'subject': selected_subject,
+                        'hours': float(hours),
+                        'notes': notes
+                    }).execute()
+                    
+                    if hasattr(response, 'data') and response.data:
+                        st.success("Study session logged successfully!")
+                    else:
+                        st.error("Error logging session: No data returned")
+                except Exception as e:
+                    st.error(f"Error logging session: {str(e)}")
+    
     except Exception as e:
-        st.error(f"Error in dashboard: {str(e)}")
+        st.error(f"Error loading dashboard: {str(e)}")
+        return
 
     # Display existing logs
     try:
         logs_response = supabase.table('progress_logs').select('*').execute()
-        if logs_response.data:
+        if hasattr(logs_response, 'data') and logs_response.data:
             st.header("Study Sessions Log")
             df_logs = pd.DataFrame(logs_response.data)
             st.dataframe(df_logs)
     except Exception as e:
-        st.error(f"Error loading logs: {str(e)}")
+        st.error(f"Error loading logs: {str(e)}")    
         
 def analytics_page():
     st.title("Progress Analytics")
@@ -1134,4 +1149,6 @@ def main():
     pages[selection]()
 
 if __name__ == '__main__':
+    init_db()  # Initialize database
+    main()
     main()
