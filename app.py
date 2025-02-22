@@ -1095,7 +1095,7 @@ def chat_assistant_page():
 # ------------------------
 
 def main():
-    st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
+    # st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
     
     pages = {
         "Dashboard": dashboard_page,
