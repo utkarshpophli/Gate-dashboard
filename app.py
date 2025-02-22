@@ -432,7 +432,7 @@ def insert_progress_log(date_str, phase, subject, hours, notes):
 def get_progress_logs():
     """Retrieves all progress logs."""
     try:
-        response = supabase.table('progress_logs').select('*').order('date', ascending=False).execute()
+        response = supabase.table('progress_logs').select('*').order('date', desc=False).execute()
         return response.data if hasattr(response, 'data') else []
     except Exception as e:
         st.error(f"Error fetching progress logs: {str(e)}")
@@ -1199,7 +1199,7 @@ def calendar_view_page():
 
     try:
         # Get progress logs
-        logs_response = supabase.table('progress_logs').select('*').order('date', ascending=False).execute()
+        logs_response = supabase.table('progress_logs').select('*').order('date', desc=False).execute()
         
         if not hasattr(logs_response, 'data') or not logs_response.data:
             st.info("No study sessions logged yet.")
@@ -1215,7 +1215,7 @@ def calendar_view_page():
         df_logs['month_year'] = df_logs['date'].dt.strftime('%B %Y')
         
         # Get unique months
-        months = df_logs['month_year'].unique()
+        months = sorted(df_logs['month_year'].unique(), reverse=True)  # Most recent first
         
         # Create month tabs
         if len(months) > 0:
@@ -1225,8 +1225,8 @@ def calendar_view_page():
                 with month_tabs[i]:
                     month_data = df_logs[df_logs['month_year'] == month]
                     
-                    # Group by date
-                    dates = month_data['date'].dt.date.unique()
+                    # Group by date and sort in reverse chronological order
+                    dates = sorted(month_data['date'].dt.date.unique(), reverse=True)
                     
                     for date in dates:
                         date_data = month_data[month_data['date'].dt.date == date]
@@ -1284,15 +1284,18 @@ def calendar_view_page():
                                 except Exception as e:
                                     st.error(f"Error deleting sessions: {str(e)}")
 
-        # Add monthly summary
+        # Add monthly summary in sidebar
         st.sidebar.markdown("## Monthly Summary")
         for month in months:
             month_data = df_logs[df_logs['month_year'] == month]
             total_month_hours = month_data['hours'].sum()
             total_month_sessions = len(month_data)
+            total_month_subjects = month_data['subject'].nunique()
+            
             st.sidebar.markdown(f"**{month}**")
             st.sidebar.markdown(f"- Total Hours: {total_month_hours:.1f}")
             st.sidebar.markdown(f"- Sessions: {total_month_sessions}")
+            st.sidebar.markdown(f"- Subjects: {total_month_subjects}")
             st.sidebar.markdown("---")
 
     except Exception as e:
