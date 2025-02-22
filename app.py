@@ -813,7 +813,7 @@ def analytics_page():
                 fig = px.line(daily_hours, x="date", y="hours",
                              title="Daily Study Hours",
                              labels={"hours": "Hours", "date": "Date"})
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key='tab2')
                 
             elif time_analysis == "Weekly Pattern":
                 df_logs["weekday"] = df_logs["date"].dt.day_name()
@@ -826,20 +826,20 @@ def analytics_page():
                 
                 fig = px.bar(weekly_hours, x="Weekday", y="Average Hours",
                             title="Average Study Hours by Weekday")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True,key='tab_week')
                 
             elif time_analysis == "Monthly Progress":
                 df_logs["month"] = df_logs["date"].dt.strftime("%Y-%m")
                 monthly_hours = df_logs.groupby("month")["hours"].sum().reset_index()
                 fig = px.bar(monthly_hours, x="month", y="hours",
                             title="Monthly Study Hours")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key='tab_month')
                 
             else:  # Cumulative Progress
                 df_logs["cumulative_hours"] = df_logs["hours"].cumsum()
                 fig = px.line(df_logs, x="date", y="cumulative_hours",
                              title="Cumulative Study Hours")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key='tab_cumulative')
 
         with tab3:
             st.header("Subject Analysis")
@@ -864,7 +864,7 @@ def analytics_page():
             # Progress over time for selected subject
             fig = px.line(subject_data, x="date", y="hours",
                          title=f"{selected_subject} - Study Hours Over Time")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, key='tab3')
             
             # Session details table
             st.subheader("Session Details")
