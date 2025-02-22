@@ -10,6 +10,7 @@ import plotly.express as px
 import streamlit as st
 from dotenv import load_dotenv
 from azure.ai.inference import ChatCompletionsClient
+import sqlalchemy
 from azure.ai.inference.models import (
     SystemMessage, 
     UserMessage, 
@@ -42,24 +43,25 @@ except ImportError:
 DB_FILE = "data_hub.db"
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+    # Retrieve the Supabase Postgres connection string from Streamlit secrets
+    DATABASE_URL = st.secrets["DATABASE_URL"]
+    # Create the SQLAlchemy engine
+    engine = sqlalchemy.create_engine(DATABASE_URL)
+    # Establish and return a connection
+    connection = engine.connect()
+    return connection
 
 def init_db():
     conn = get_db_connection()
-    c = conn.cursor()
-    
-    # Create progress_logs table
-    c.execute("""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS progress_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             date TEXT NOT NULL,
             phase TEXT NOT NULL,
             subject TEXT NOT NULL,
             hours REAL NOT NULL,
             notes TEXT
-        )
+        );
     """)
     # Create schedule table
     c.execute("""
