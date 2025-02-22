@@ -1222,156 +1222,209 @@ def study_goals_page():
         else:
             st.info("No study goals set yet. Use the form above to add goals.")
             
-def calendar_view_page():
-    st.title("Calendar View")
-    st.subheader("Interactive Study Calendar")
+def download_reports_page():
+    st.title("Download Reports")
+    st.subheader("Study Session Reports and Analytics")
 
     try:
         # Get progress logs
         logs_response = supabase.table('progress_logs').select('*').order('date').execute()
         
         if not hasattr(logs_response, 'data') or not logs_response.data:
-            st.info("No study sessions logged yet.")
+            st.info("No study sessions available to download.")
             return
         
-        df_logs = pd.DataFrame(logs_response.data)
+        logs = logs_response.data
+        
+        # Convert to DataFrame
+        df_logs = pd.DataFrame(logs)
         df_logs['date'] = pd.to_datetime(df_logs['date'])
         
-        # Calendar Navigation
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            # Get min and max dates
-            min_date = df_logs['date'].min()
-            max_date = df_logs['date'].max()
-            
-            # Create month selector
-            months = pd.date_range(start=min_date, end=max_date, freq='M')
-            selected_month = st.selectbox(
-                "Select Month",
-                months,
-                format_func=lambda x: x.strftime('%B %Y'),
-                index=len(months)-1
-            )
+        # Create different report types
+        st.header("Available Reports")
         
-        with col2:
-            view_type = st.radio(
-                "View Type",
-                ["Monthly Calendar", "Daily List", "Weekly Summary"],
-                horizontal=True
-            )
+        # 1. Basic Study Log
+        st.subheader("1. Basic Study Log")
+        basic_df = df_logs[['date', 'subject', 'phase', 'hours', 'notes']]
+        st.dataframe(basic_df.reset_index(drop=True))
         
-        # Filter data for selected month
-        month_mask = (
-            (df_logs['date'].dt.year == selected_month.year) & 
-            (df_logs['date'].dt.month == selected_month.month)
+        csv_basic = basic_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            "Download Basic Study Log (CSV)",
+            csv_basic,
+            "study_sessions_basic.csv",
+            "text/csv",
+            key='download_basic'
         )
-        month_data = df_logs[month_mask]
+
+        # 2. Subject-wise Summary
+        st.subheader("2. Subject-wise Summary")
+        subject_summary = df_logs.groupby('subject').agg({
+            'hours': ['sum', 'mean', 'count'],
+            'date': 'nunique'
+        }).round(2)
+        subject_summary.columns = ['Total Hours', 'Avg Hours/Session', 'Number of Sessions', 'Number of Days']
+        st.dataframe(subject_summary.reset_index())
         
-        if view_type == "Monthly Calendar":
-            # Create calendar grid
-            calendar_data = []
-            first_day = pd.Timestamp(selected_month.year, selected_month.month, 1)
-            last_day = (first_day + pd.offsets.MonthEnd(0))
-            
-            # Create week rows
-            current_date = first_day
-            while current_date <= last_day:
-                week_data = []
-                for _ in range(7):
-                    if current_date.month == selected_month.month and current_date <= last_day:
-                        day_data = month_data[month_data['date'].dt.date == current_date.date()]
-                        total_hours = day_data['hours'].sum()
-                        subjects = day_data['subject'].nunique()
-                        week_data.append({
-                            'date': current_date,
-                            'hours': total_hours,
-                            'subjects': subjects
-                        })
-                    else:
-                        week_data.append(None)
-                    current_date += pd.Timedelta(days=1)
-                calendar_data.append(week_data)
-            
-            # Display calendar
-            st.markdown("### Monthly Calendar")
-            cols = st.columns(7)
-            for i, day in enumerate(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']):
-                cols[i].markdown(f"**{day}**")
-            
-            for week in calendar_data:
-                cols = st.columns(7)
-                for i, day in enumerate(week):
-                    if day:
-                        with cols[i]:
-                            st.markdown(f"**{day['date'].day}**")
-                            if day['hours'] > 0:
-                                st.markdown(f"{day['hours']:.1f}h")
-                                st.markdown(f"{day['subjects']} subjects")
-                    else:
-                        cols[i].markdown("")
+        csv_subject = subject_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Subject Summary (CSV)",
+            csv_subject,
+            "subject_summary.csv",
+            "text/csv",
+            key='download_subject'
+        )
+
+        # 3. Daily Summary
+        st.subheader("3. Daily Summary")
+        daily_summary = df_logs.groupby('date').agg({
+            'hours': ['sum', 'count'],
+            'subject': 'nunique'
+        }).round(2)
+        daily_summary.columns = ['Total Hours', 'Number of Sessions', 'Subjects Covered']
+        st.dataframe(daily_summary.reset_index())
         
-        elif view_type == "Daily List":
-            st.markdown("### Daily Study Sessions")
-            for date in sorted(month_data['date'].dt.date.unique(), reverse=True):
-                day_data = month_data[month_data['date'].dt.date == date]
-                with st.expander(
-                    f"{date.strftime('%A, %B %d')} - {day_data['hours'].sum():.1f}h"
-                ):
-                    display_dataframe(
-                        day_data[['subject', 'hours', 'phase', 'notes']]
-                    )
+        csv_daily = daily_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Daily Summary (CSV)",
+            csv_daily,
+            "daily_summary.csv",
+            "text/csv",
+            key='download_daily'
+        )
+
+        # 4. Phase-wise Progress
+        st.subheader("4. Phase-wise Progress")
+        phase_summary = df_logs.groupby('phase').agg({
+            'hours': ['sum', 'mean', 'count'],
+            'subject': 'nunique',
+            'date': 'nunique'
+        }).round(2)
+        phase_summary.columns = ['Total Hours', 'Avg Hours/Session', 'Number of Sessions', 
+                               'Unique Subjects', 'Number of Days']
+        st.dataframe(phase_summary.reset_index())
         
-        else:  # Weekly Summary
-            st.markdown("### Weekly Summary")
-            week_data = month_data.copy()
-            week_data['week'] = week_data['date'].dt.isocalendar().week
-            weekly_summary = week_data.groupby('week').agg({
-                'hours': 'sum',
-                'subject': 'nunique',
-                'date': 'nunique'
-            }).reset_index()
-            weekly_summary.columns = ['Week', 'Total Hours', 'Unique Subjects', 'Days Studied']
-            
-            # Display weekly summary
-            display_dataframe(weekly_summary)
-            
-            # Add weekly chart
-            fig = px.bar(
-                weekly_summary,
-                x='Week',
-                y='Total Hours',
-                title='Weekly Study Hours'
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        csv_phase = phase_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Phase Summary (CSV)",
+            csv_phase,
+            "phase_summary.csv",
+            "text/csv",
+            key='download_phase'
+        )
+
+        # 5. Monthly Summary
+        st.subheader("5. Monthly Summary")
+        df_logs['month_year'] = df_logs['date'].dt.strftime('%Y-%m')
+        monthly_summary = df_logs.groupby('month_year').agg({
+            'hours': ['sum', 'mean', 'count'],
+            'subject': 'nunique',
+            'date': 'nunique'
+        }).round(2)
+        monthly_summary.columns = ['Total Hours', 'Avg Hours/Session', 'Number of Sessions',
+                                 'Unique Subjects', 'Number of Days']
+        st.dataframe(monthly_summary.reset_index())
         
-        # Monthly Statistics
-        st.markdown("### Monthly Statistics")
+        csv_monthly = monthly_summary.to_csv().encode('utf-8')
+        st.download_button(
+            "Download Monthly Summary (CSV)",
+            csv_monthly,
+            "monthly_summary.csv",
+            "text/csv",
+            key='download_monthly'
+        )
+
+        # 6. Comprehensive Report (Combined CSV)
+        st.subheader("6. Comprehensive Report")
+        
+        # Create a dictionary of all dataframes
+        comprehensive_data = {
+            'study_sessions': df_logs,
+            'subject_summary': subject_summary,
+            'daily_summary': daily_summary,
+            'phase_summary': phase_summary,
+            'monthly_summary': monthly_summary
+        }
+        
+        # Create a combined CSV with sections
+        combined_csv_parts = []
+        
+        for section_name, df in comprehensive_data.items():
+            # Add section header
+            combined_csv_parts.append(f"\n\n{section_name.upper()}\n")
+            # Add dataframe content
+            combined_csv_parts.append(df.to_csv())
+        
+        # Combine all parts
+        combined_csv = "\n".join(combined_csv_parts)
+        
+        # Offer download of combined report
+        st.download_button(
+            "Download Comprehensive Report (CSV)",
+            combined_csv.encode('utf-8'),
+            "comprehensive_study_report.csv",
+            "text/csv",
+            key='download_comprehensive'
+        )
+
+        # Display overall statistics
+        st.header("Overall Statistics")
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric(
-                "Total Hours",
-                f"{month_data['hours'].sum():.1f}"
-            )
+            st.metric("Total Study Hours", f"{df_logs['hours'].sum():.1f}")
         with col2:
-            st.metric(
-                "Study Days",
-                len(month_data['date'].dt.date.unique())
-            )
+            st.metric("Total Sessions", len(df_logs))
         with col3:
-            st.metric(
-                "Subjects Covered",
-                month_data['subject'].nunique()
-            )
+            st.metric("Days Studied", df_logs['date'].nunique())
         with col4:
-            avg_hours = month_data['hours'].sum() / len(month_data['date'].dt.date.unique())
-            st.metric(
-                "Avg Hours/Day",
-                f"{avg_hours:.1f}"
-            )
+            avg_hours_per_day = df_logs['hours'].sum() / df_logs['date'].nunique()
+            st.metric("Avg Hours/Day", f"{avg_hours_per_day:.1f}")
+
+        # Add visualizations
+        st.header("Study Progress Visualizations")
+        
+        # 1. Daily Study Hours
+        fig1 = px.line(
+            df_logs.groupby('date')['hours'].sum().reset_index(),
+            x='date',
+            y='hours',
+            title='Daily Study Hours'
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        # 2. Subject Distribution
+        fig2 = px.pie(
+            df_logs.groupby('subject')['hours'].sum().reset_index(),
+            values='hours',
+            names='subject',
+            title='Study Hours by Subject'
+        )
+        st.plotly_chart(fig2, use_container_width=True)
+        
+        # 3. Phase Progress
+        fig3 = px.bar(
+            df_logs.groupby('phase')['hours'].sum().reset_index(),
+            x='phase',
+            y='hours',
+            title='Study Hours by Phase'
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+        
+        # 4. Monthly Progress
+        monthly_progress = df_logs.groupby('month_year')['hours'].sum().reset_index()
+        fig4 = px.bar(
+            monthly_progress,
+            x='month_year',
+            y='hours',
+            title='Monthly Study Progress'
+        )
+        st.plotly_chart(fig4, use_container_width=True)
 
     except Exception as e:
-        st.error(f"Error in calendar view: {str(e)}")
+        st.error(f"Error generating reports: {str(e)}")
+        st.error("Detailed error information:")
+        st.exception(e)
         return
         
 def download_reports_page():
