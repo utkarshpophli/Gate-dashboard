@@ -521,18 +521,38 @@ def get_all_questions():
         st.error(f"Error fetching questions: {str(e)}")
         return []
 
-def insert_resource(subject, title, link, filename):
-    data = {"subject": subject, "title": title, "link": link, "filename": filename}
-    result = supabase.table("resources").insert(data).execute()
-    if result.error:
-        st.error(f"Error inserting resource: {result.error}")
+def insert_resource(subject, title, link, filename=None):
+    """Inserts a new resource into the database."""
+    try:
+        data = {
+            "subject": subject,
+            "title": title,
+            "link": link,
+            "filename": filename
+        }
+        response = supabase.table("resources").insert(data).execute()
+        return hasattr(response, 'data') and response.data
+    except Exception as e:
+        st.error(f"Error inserting resource: {str(e)}")
+        return False
 
+def delete_resource(resource_id):
+    """Deletes a resource from the database."""
+    try:
+        response = supabase.table("resources").delete().eq('id', resource_id).execute()
+        return hasattr(response, 'data') and response.data
+    except Exception as e:
+        st.error(f"Error deleting resource: {str(e)}")
+        return False
+        
 def get_all_resources():
-    result = supabase.table("resources").select("*").execute()
-    if result.error:
-        st.error(f"Error fetching resources: {result.error}")
+    """Retrieves all resources from the database."""
+    try:
+        response = supabase.table("resources").select("*").execute()
+        return response.data if hasattr(response, 'data') else []
+    except Exception as e:
+        st.error(f"Error fetching resources: {str(e)}")
         return []
-    return result.data
 
 def insert_study_goal(description, target_hours, achieved_hours=0):
     data = {"description": description, "target_hours": target_hours, "achieved_hours": achieved_hours}
@@ -951,35 +971,106 @@ def question_bank_page():
 def resources_page():
     st.title("Resources")
     st.subheader("Store Resource Links and Files")
-    with st.form("resources_form"):
-        subject = st.text_input("Subject")
-        resource_title = st.text_input("Resource Title")
-        resource_link = st.text_input("Resource Link (URL)")
-        uploaded_file = st.file_uploader("Upload a file (optional)",
-                                         type=["pdf", "docx", "xlsx", "png", "jpg"],
-                                         key="resource_file")
-        submit = st.form_submit_button("Add Resource")
-        if submit:
-            if subject and resource_title and (resource_link or uploaded_file):
-                filename = None
-                if uploaded_file is not None:
-                    upload_folder = "uploads"
-                    if not os.path.exists(upload_folder):
-                        os.makedirs(upload_folder)
-                    file_path = os.path.join(upload_folder, uploaded_file.name)
-                    with open(file_path, "wb") as f:
-                        f.write(uploaded_file.getbuffer())
-                    filename = file_path
-                insert_resource(subject, resource_title, resource_link, filename)
-                st.success("Resource added!")
-            else:
-                st.error("Please provide the subject, resource title, and at least a link or file.")
-    resources = get_all_resources()
-    if resources:
-        df_res = pd.DataFrame(resources, columns=resources[0].keys())
-        st.dataframe(df_res)
-    else:
-        st.info("No resources added yet.")
+
+    # Create tabs for different resource management sections
+    tab1, tab2 = st.tabs(["Add Resource", "View Resources"])
+
+    with tab1:
+        with st.form("resources_form"):
+            subject = st.selectbox("Subject", SUBJECT_LIST)
+            resource_title = st.text_input("Resource Title")
+            resource_link = st.text_input("Resource Link (URL)")
+            
+            uploaded_file = st.file_uploader(
+                "Upload a file (optional)",
+                type=["pdf", "docx", "xlsx", "png", "jpg"],
+                key="resource_file"
+            )
+            
+            submit = st.form_submit_button("Add Resource")
+            
+            if submit:
+                if subject and resource_title and (resource_link or uploaded_file):
+                    filename = None
+                    if uploaded_file:
+                        try:
+                            # Create uploads directory if it doesn't exist
+                            upload_folder = "uploads"
+                            os.makedirs(upload_folder, exist_ok=True)
+                            
+                            # Save the file
+                            file_path = os.path.join(upload_folder, uploaded_file.name)
+                            with open(file_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+                            filename = file_path
+                            
+                        except Exception as e:
+                            st.error(f"Error saving file: {str(e)}")
+                            filename = None
+                    
+                    if insert_resource(subject, resource_title, resource_link, filename):
+                        st.success("Resource added successfully!")
+                        st.rerun()
+                else:
+                    st.error("Please provide the subject, resource title, and at least a link or file.")
+
+    with tab2:
+        resources = get_all_resources()
+        if resources:
+            # Add search/filter functionality
+            search_term = st.text_input("Search resources (by subject or title):")
+            
+            # Convert to DataFrame
+            df_resources = pd.DataFrame(resources)
+            
+            # Apply search filter if provided
+            if search_term:
+                mask = (
+                    df_resources['subject'].str.contains(search_term, case=False, na=False) |
+                    df_resources['title'].str.contains(search_term, case=False, na=False)
+                )
+                df_resources = df_resources[mask]
+
+            # Group by subject
+            subjects = df_resources['subject'].unique()
+            
+            for subject in sorted(subjects):
+                with st.expander(f"{subject} ({len(df_resources[df_resources['subject'] == subject])} resources)"):
+                    subject_resources = df_resources[df_resources['subject'] == subject]
+                    
+                    for _, row in subject_resources.iterrows():
+                        st.markdown("---")
+                        st.markdown(f"**Title:** {row['title']}")
+                        
+                        if row['link']:
+                            st.markdown(f"**Link:** [{row['link']}]({row['link']})")
+                        
+                        if row['filename']:
+                            try:
+                                if os.path.exists(row['filename']):
+                                    with open(row['filename'], "rb") as file:
+                                        st.download_button(
+                                            label="Download File",
+                                            data=file,
+                                            file_name=os.path.basename(row['filename']),
+                                            mime="application/octet-stream"
+                                        )
+                            except Exception as e:
+                                st.error(f"Error accessing file: {str(e)}")
+                        
+                        # Add delete button
+                        if st.button(f"Delete Resource {row['id']}", key=f"del_res_{row['id']}"):
+                            if delete_resource(row['id']):
+                                # Also delete the file if it exists
+                                if row['filename'] and os.path.exists(row['filename']):
+                                    try:
+                                        os.remove(row['filename'])
+                                    except Exception as e:
+                                        st.error(f"Error deleting file: {str(e)}")
+                                st.success(f"Resource {row['id']} deleted successfully!")
+                                st.rerun()
+        else:
+            st.info("No resources added yet. Use the form above to add resources.")
 
 def study_goals_page():
     st.title("Study Goals")
