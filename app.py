@@ -1228,7 +1228,7 @@ def calendar_view_page():
                     # Group by date and sort in reverse chronological order
                     dates = sorted(month_data['date'].dt.date.unique(), reverse=True)
                     
-                    for date in dates:
+                    for date_idx, date in enumerate(dates):
                         date_data = month_data[month_data['date'].dt.date == date]
                         
                         # Calculate daily summary
@@ -1263,14 +1263,17 @@ def calendar_view_page():
                             # Show subject breakdown
                             subject_hours = date_data.groupby('subject')['hours'].sum()
                             
-                            # Create a bar chart for subject distribution
+                            # Create a bar chart for subject distribution with unique key
                             fig = px.bar(
                                 x=subject_hours.index,
                                 y=subject_hours.values,
                                 title="Hours by Subject",
                                 labels={'x': 'Subject', 'y': 'Hours'}
                             )
-                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Add unique key for each plotly chart
+                            chart_key = f"chart_{month}_{date_idx}"
+                            st.plotly_chart(fig, use_container_width=True, key=chart_key)
                             
                             # Option to delete sessions
                             if st.button(f"Delete All Sessions for {date}", key=f"del_{date}"):
@@ -1298,10 +1301,21 @@ def calendar_view_page():
             st.sidebar.markdown(f"- Subjects: {total_month_subjects}")
             st.sidebar.markdown("---")
 
+        # Add overall summary at the top
+        st.sidebar.markdown("## Overall Summary")
+        total_hours = df_logs['hours'].sum()
+        total_sessions = len(df_logs)
+        total_subjects = df_logs['subject'].nunique()
+        avg_hours_per_session = total_hours / total_sessions if total_sessions > 0 else 0
+        
+        st.sidebar.metric("Total Study Hours", f"{total_hours:.1f}")
+        st.sidebar.metric("Total Sessions", total_sessions)
+        st.sidebar.metric("Total Subjects", total_subjects)
+        st.sidebar.metric("Avg Hours/Session", f"{avg_hours_per_session:.1f}")
+
     except Exception as e:
         st.error(f"Error in calendar view: {str(e)}")
         return
-
 def download_reports_page():
     st.title("Download Reports")
     st.subheader("Study Session Reports and Analytics")
