@@ -45,32 +45,9 @@ except ImportError:
     Image = None
     pytesseract = None
 
-def load_theme():
-    # Check if dark theme is enabled
-    if 'dark_theme' not in st.session_state:
-        st.session_state.dark_theme = True  # Default to dark theme
-
-    # Load appropriate CSS files based on theme
-    theme_files = [
-        'dark-theme.css' if st.session_state.dark_theme else 'base.css',
-        'dark-calendar.css' if st.session_state.dark_theme else 'calendar.css',
-        'dark-mobile.css' if st.session_state.dark_theme else 'mobile.css'
-    ]
-    
-    css_content = []
-    for css_file in theme_files:
-        with open(f'static/{css_file}') as f:
-            css_content.append(f.read())
-    
-    combined_css = '\n'.join(css_content)
-    st.markdown(f'<style>{combined_css}</style>', unsafe_allow_html=True)
-
-def add_theme_switcher():
-    # Add theme switcher to sidebar
-    with st.sidebar:
-        if st.button("Toggle Theme"):
-            st.session_state.dark_theme = not st.session_state.dark_theme
-            st.experimental_rerun()
+def load_css():
+    with open('static/style.css') as f:
+        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
 # ============================
 # 1. Database Setup & Helpers
@@ -1760,6 +1737,5 @@ def main():
 
 if __name__ == '__main__':
     init_db()
-    load_theme()
-    add_theme_switcher()
+    load_css()
     main()
