@@ -656,37 +656,29 @@ def display_dataframe(df, hide_index=True):
 def dashboard_page():
     st.title("GATE DA 2026 Dashboard")
     st.subheader("Overview of Your Study Progress")
+
+    schedules = get_all_schedules()
+    phase_options = list(schedules.keys()) if schedules else ['Phase 1']
     
-    try:
-        schedules = get_all_schedules()
-        phase_options = list(schedules.keys()) if schedules else ['Phase 1']
+    with st.form("study_session_form"):
+        session_date = st.date_input("Date", datetime.date.today())
+        selected_phase = st.selectbox("Select Phase", phase_options)
+        selected_subject = st.selectbox("Subject", SUBJECT_LIST)
+        hours = st.number_input("Hours Studied", min_value=0.0, step=0.5)
+        notes = st.text_area("Notes / Reflection")
+        submitted = st.form_submit_button("Log Session")
         
-        with st.form("study_session_form"):
-            session_date = st.date_input("Date", datetime.date.today())
-            selected_phase = st.selectbox("Select Phase", phase_options)
-            selected_subject = st.selectbox("Subject", SUBJECT_LIST)
-            hours = st.number_input("Hours Studied", min_value=0.0, step=0.5)
-            notes = st.text_area("Notes / Reflection")
-            submitted = st.form_submit_button("Log Session")
-            
-            if submitted:
-                try:
-                    date_str = session_date.strftime("%Y-%m-%d")
-                    success = insert_progress_log(date_str, selected_phase, selected_subject, hours, notes)
-                    
-                    if success:
-                        st.success("Study session logged successfully!")
-                        time.sleep(1)  # Give user time to see the success message
-                        st.rerun()  # Refresh the page to show new data
-                    else:
-                        st.error("Failed to log study session")
+        if submitted:
+            try:
+                date_str = session_date.strftime("%Y-%m-%d")
+                success = insert_progress_log(date_str, selected_phase, selected_subject, hours, notes)
+                
+                if success:
+                    st.success("Study session logged successfully!")
+                    time.sleep(1)  # Give user time to see the success message
+                    st.rerun()  # Refresh the page to show new data
                         
-                except Exception as e:
-                    st.error(f"Error logging session: {str(e)}")
     
-    except Exception as e:
-        st.error(f"Error loading dashboard: {str(e)}")
-        return
 
     # Display existing logs
     try:
@@ -710,7 +702,7 @@ def dashboard_page():
             
     except Exception as e:
         st.error(f"Error loading logs: {str(e)}")
-                
+
 def analytics_page():
     st.title("Progress Analytics")
     
