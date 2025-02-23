@@ -324,10 +324,23 @@ def init_db():
 # -----------------------
 
 def insert_progress_log(date_str, phase, subject, hours, notes):
-    """Inserts a new progress log."""
+    """Inserts a new progress log with manual ID management."""
     try:
-        # Create the data dictionary with only needed fields
+        # Get the next ID value
+        id_response = supabase.rpc('get_next_id', {}).execute()
+        next_id = 1  # Default starting ID
+        
+        if hasattr(id_response, 'data'):
+            next_id = id_response.data
+        else:
+            # Fallback: get max ID and add 1
+            max_id_response = supabase.table('progress_logs').select('id').order('id', desc=True).limit(1).execute()
+            if hasattr(max_id_response, 'data') and len(max_id_response.data) > 0:
+                next_id = max_id_response.data[0]['id'] + 1
+
+        # Create the data dictionary with explicit ID
         data = {
+            'id': next_id,
             'date': date_str,
             'phase': phase,
             'subject': subject,
@@ -338,7 +351,7 @@ def insert_progress_log(date_str, phase, subject, hours, notes):
         # Insert the data
         response = supabase.table('progress_logs').insert(data).execute()
         
-        if isinstance(response.data, list) and len(response.data) > 0:
+        if hasattr(response, 'data') and len(response.data) > 0:
             return True
         return False
             
