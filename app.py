@@ -827,24 +827,63 @@ def analytics_page():
 def study_planner_page():
     st.title("Study Planner")
     st.subheader("Plan and View Your Schedule for Each Phase")
-    schedules = get_all_schedules()
-    phase_keys = list(schedules.keys())
-    tabs = st.tabs(phase_keys)
-    for i, phase in enumerate(phase_keys):
-        with tabs[i]:
-            phase_info = schedules[phase]
-            st.write(f"**Title:** {phase_info['title']}")
-            st.write(f"**Focus:** {phase_info['focus']}")
-            st.write("**Schedule:**")
-            df_phase = pd.DataFrame(phase_info["table"], columns=["Day", "Time Slot", "Activity", "Details"])
-            if hasattr(st, "experimental_data_editor"):
-                edited_df = st.experimental_data_editor(df_phase, num_rows="dynamic", key=phase)
-                if st.button("Save changes", key=f"save_{phase}"):
-                    update_schedule_db(phase, edited_df.values.tolist())
-                    st.success(f"Schedule for {phase} saved!")
-            else:
-                st.dataframe(df_phase)
-
+    
+    try:
+        # Get schedules
+        schedules = get_all_schedules()
+        
+        if not schedules:
+            st.warning("No schedule data available. Initializing default schedules...")
+            init_db()  # Initialize default schedules
+            schedules = get_all_schedules()  # Try getting schedules again
+            
+        if not schedules:
+            st.error("Could not load schedule data. Please check the database connection.")
+            return
+            
+        # Get phase keys and sort them
+        phase_keys = sorted(list(schedules.keys()))
+        
+        if not phase_keys:
+            st.error("No phases found in the schedule.")
+            return
+            
+        # Create tabs for each phase
+        tabs = st.tabs(phase_keys)
+        
+        # Display schedule for each phase
+        for i, phase in enumerate(phase_keys):
+            with tabs[i]:
+                phase_info = schedules[phase]
+                st.write(f"**Title:** {phase_info['title']}")
+                st.write(f"**Focus:** {phase_info['focus']}")
+                st.write("**Schedule:**")
+                
+                if phase_info.get("table"):
+                    df_phase = pd.DataFrame(
+                        phase_info["table"], 
+                        columns=["Day", "Time Slot", "Activity", "Details"]
+                    )
+                    
+                    if hasattr(st, "experimental_data_editor"):
+                        edited_df = st.experimental_data_editor(
+                            df_phase,
+                            num_rows="dynamic",
+                            key=f"schedule_{phase}"
+                        )
+                        if st.button("Save changes", key=f"save_{phase}"):
+                            update_schedule_db(phase, edited_df.values.tolist())
+                            st.success(f"Schedule for {phase} saved!")
+                    else:
+                        st.dataframe(df_phase)
+                else:
+                    st.info(f"No schedule data available for {phase}")
+                    
+    except Exception as e:
+        st.error(f"Error loading study planner: {str(e)}")
+        st.error("Detailed error information:")
+        st.exception(e)
+        
 def revision_hub_page():
     st.title("Revision Hub")
     st.subheader("Add and Display Short Notes, Formulas, and Upload Files")
