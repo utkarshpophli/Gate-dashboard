@@ -324,26 +324,17 @@ def init_db():
 # -----------------------
 
 def insert_progress_log(date_str, phase, subject, hours, notes):
-    """Inserts a new progress log with proper RLS handling."""
+    """Inserts a new progress log."""
     try:
-        # Create the data dictionary
-        data = {
-            "date": date_str,
-            "phase": phase,
-            "subject": subject,
-            "hours": float(hours),
-            "notes": notes
-        }
-        
-        # Use rpc call instead of direct insert to bypass RLS
+        # Use the RPC function instead of direct table insert
         response = supabase.rpc(
             'insert_progress_log_secure',
             {
-                "p_date": date_str,
-                "p_phase": phase,
-                "p_subject": subject,
-                "p_hours": float(hours),
-                "p_notes": notes
+                'p_date': date_str,
+                'p_phase': phase,
+                'p_subject': subject,
+                'p_hours': float(hours),
+                'p_notes': notes
             }
         ).execute()
         
@@ -352,7 +343,6 @@ def insert_progress_log(date_str, phase, subject, hours, notes):
         else:
             st.error(f"Error logging progress: {response.error}")
             return False
-            
     except Exception as e:
         st.error(f"Error inserting progress log: {str(e)}")
         return False
@@ -370,7 +360,6 @@ def get_progress_logs():
     except Exception as e:
         st.error(f"Error fetching progress logs: {str(e)}")
         return []
-
 
 def update_schedule_db(phase, new_table):
     data = {"schedule_json": json.dumps(new_table)}
@@ -666,15 +655,14 @@ def dashboard_page():
     st.title("GATE DA 2026 Dashboard")
     st.subheader("Overview of Your Study Progress")
     
-    # Get schedules with error handling
     try:
         schedules = get_all_schedules()
-        phase_options = list(schedules.keys()) if schedules else ['Phase 1']  # Provide default if empty
+        phase_options = list(schedules.keys()) if schedules else ['Phase 1']
         
         with st.form("study_session_form"):
             session_date = st.date_input("Date", datetime.date.today())
             selected_phase = st.selectbox("Select Phase", phase_options)
-            selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
+            selected_subject = st.selectbox("Subject", SUBJECT_LIST)
             hours = st.number_input("Hours Studied", min_value=0.0, step=0.5)
             notes = st.text_area("Notes / Reflection")
             submitted = st.form_submit_button("Log Session")
@@ -682,19 +670,11 @@ def dashboard_page():
             if submitted:
                 try:
                     date_str = session_date.strftime("%Y-%m-%d")
-                    # Insert using Supabase client
-                    response = supabase.table('progress_logs').insert({
-                        'date': date_str,
-                        'phase': selected_phase,
-                        'subject': selected_subject,
-                        'hours': float(hours),
-                        'notes': notes
-                    }).execute()
-                    
-                    if hasattr(response, 'data') and response.data:
+                    if insert_progress_log(date_str, selected_phase, selected_subject, hours, notes):
                         st.success("Study session logged successfully!")
+                        st.rerun()  # Refresh the page to show new data
                     else:
-                        st.error("Error logging session: No data returned")
+                        st.error("Failed to log study session")
                 except Exception as e:
                     st.error(f"Error logging session: {str(e)}")
     
@@ -704,13 +684,13 @@ def dashboard_page():
 
     # Display existing logs
     try:
-        logs_response = supabase.table('progress_logs').select('*').execute()
+        logs_response = supabase.table('progress_logs').select('*').order('date', desc=True).execute()
         if hasattr(logs_response, 'data') and logs_response.data:
             st.header("Study Sessions Log")
             df_logs = pd.DataFrame(logs_response.data)
-            st.dataframe(df_logs)
+            st.dataframe(df_logs.sort_values('date', ascending=False))
     except Exception as e:
-        st.error(f"Error loading logs: {str(e)}")    
+        st.error(f"Error loading logs: {str(e)}")
         
 def analytics_page():
     st.title("Progress Analytics")
