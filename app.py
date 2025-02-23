@@ -642,6 +642,7 @@ def dashboard_page():
         phase_options = list(schedules.keys()) if schedules else ['Phase 1']
         
         with st.form("study_session_form"):
+            # Date input with proper formatting
             session_date = st.date_input("Date", datetime.date.today())
             selected_phase = st.selectbox("Select Phase", phase_options)
             selected_subject = st.selectbox("Subject", SUBJECT_LIST)
@@ -649,7 +650,7 @@ def dashboard_page():
                 "Hours Studied",
                 min_value=0.0,
                 max_value=24.0,
-                value=0.0,
+                value=1.0,
                 step=0.5
             )
             notes = st.text_area("Notes / Reflection")
@@ -657,7 +658,13 @@ def dashboard_page():
             
             if submitted:
                 try:
+                    # Format date as M/D/YYYY
                     date_str = session_date.strftime("%-m/%-d/%Y")
+                    
+                    if hours <= 0:
+                        st.error("Hours must be greater than 0")
+                        return
+                        
                     success = insert_progress_log(date_str, selected_phase, selected_subject, hours, notes)
                     
                     if success:
@@ -674,23 +681,14 @@ def dashboard_page():
 
     # Display existing logs
     try:
-        # Select only the required columns
+        # Get logs ordered by ID in descending order
         logs_response = supabase.table('progress_logs').select(
             'id,date,phase,subject,hours,notes'
-        ).order('date', desc=True).execute()
+        ).order('id', desc=True).execute()
         
         if isinstance(logs_response.data, list) and len(logs_response.data) > 0:
             st.header("Study Sessions Log")
             df_logs = pd.DataFrame(logs_response.data)
-            
-            # Convert date strings to datetime for proper sorting
-            df_logs['date'] = pd.to_datetime(df_logs['date'])
-            df_logs = df_logs.sort_values('date', ascending=False)
-            df_logs['date'] = df_logs['date'].dt.strftime('%Y-%m-%d')
-            
-            # Ensure columns are in the correct order
-            columns_order = ['id', 'date', 'phase', 'subject', 'hours', 'notes']
-            df_logs = df_logs[columns_order]
             
             # Display the dataframe
             st.dataframe(
