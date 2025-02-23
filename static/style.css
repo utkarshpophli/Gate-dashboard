@@ -12,6 +12,7 @@
 @import 'components/tables.css';
 @import 'components/charts.css';
 @import 'components/messages.css';
+@import 'components/header.css';
 
 /* Import layout styles */
 @import 'layouts/sidebar.css';

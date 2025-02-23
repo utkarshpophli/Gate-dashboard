@@ -87,6 +87,31 @@ def load_page_specific_css(page_name):
         with open(css_file) as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
+def create_header():
+    """Create the app header with logo and title"""
+    header_html = """
+        <div class="app-header">
+            <img src="data:image/png;base64,{}" class="app-logo">
+            <div class="app-header-content">
+                <h1 class="app-title">GATE DA 2026</h1>
+                <p class="app-subtitle">Study Dashboard & Planner</p>
+            </div>
+        </div>
+    """
+    
+    # Read the logo image
+    logo_path = Path("static/images/logos/app-logo.png")
+    if logo_path.exists():
+        import base64
+        with open(logo_path, "rb") as f:
+            logo_data = base64.b64encode(f.read()).decode()
+        
+        # Display the header
+        st.markdown(header_html.format(logo_data), unsafe_allow_html=True)
+    else:
+        st.error("Logo file not found!")
+
+
 # ============================
 # 1. Database Setup & Helpers
 # ============================
@@ -1755,6 +1780,7 @@ def chat_assistant_page():
 def main():
     # Load base CSS
     load_css()
+    create_header()
     
     
     # Navigation
