@@ -345,7 +345,7 @@ def insert_progress_log(date_str, phase, subject, hours, notes):
     except Exception as e:
         st.error(f"Error inserting progress log: {str(e)}")
         return False
-        
+
 def update_schedule_db(phase, new_table):
     data = {"schedule_json": json.dumps(new_table)}
     result = supabase.table("schedule").update(data).eq("phase", phase).execute()
@@ -644,7 +644,7 @@ def dashboard_page():
             
             if submitted:
                 try:
-                    date_str = session_date.strftime("%Y-%m-%d")
+                    date_str = session_date.strftime("%-m/%-d/%Y")
                     success = insert_progress_log(date_str, selected_phase, selected_subject, hours, notes)
                     
                     if success:
