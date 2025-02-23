@@ -9,6 +9,7 @@ import pandas as pd
 from io import BytesIO
 import plotly.express as px
 import streamlit as st
+from pathlib import Path
 from dotenv import load_dotenv
 from azure.ai.inference import ChatCompletionsClient
 import sqlalchemy
