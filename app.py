@@ -31,7 +31,7 @@ supabase: Client = create_client(
     supabase_url=st.secrets["SUPABASE_URL"],
     supabase_key=st.secrets["SUPABASE_KEY"]
 )
-st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
+# st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
 
 # Optional: for PDF and image text extraction
 try:
@@ -46,8 +46,41 @@ except ImportError:
     pytesseract = None
 
 def load_css():
-    with open('static/style.css') as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    """Load all CSS files from the static directory"""
+    css_directory = Path("static/css")
+    
+    # First load base styles
+    base_styles = [
+        css_directory / "base/reset.css",
+        css_directory / "base/variables.css",
+        css_directory / "base/typography.css",
+        css_directory / "base/animations.css"
+    ]
+    
+    css_content = []
+    
+    # Load base styles first
+    for css_file in base_styles:
+        if css_file.exists():
+            with open(css_file) as f:
+                css_content.append(f.read())
+    
+    # Load main style.css which imports everything else
+    main_style = css_directory / "style.css"
+    if main_style.exists():
+        with open(main_style) as f:
+            css_content.append(f.read())
+    
+    # Combine all CSS and inject
+    combined_css = "\n".join(css_content)
+    st.markdown(f"<style>{combined_css}</style>", unsafe_allow_html=True)
+
+def load_page_specific_css(page_name):
+    """Load page-specific CSS"""
+    css_file = Path(f"static/css/pages/{page_name.lower().replace(' ', '_')}.css")
+    if css_file.exists():
+        with open(css_file) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 # ============================
 # 1. Database Setup & Helpers
@@ -1715,8 +1748,17 @@ def chat_assistant_page():
 # ------------------------
 
 def main():
-    # st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
+    # Load base CSS
+    load_css()
     
+    # Set page config
+    st.set_page_config(
+        page_title="GATE DA 2026 Dashboard",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    
+    # Navigation
     pages = {
         "Dashboard": dashboard_page,
         "Study Planner": study_planner_page,
@@ -1733,6 +1775,11 @@ def main():
     }
     
     selection = st.sidebar.radio("Navigation", list(pages.keys()))
+    
+    # Load page-specific CSS
+    load_page_specific_css(selection)
+    
+    # Render selected page
     pages[selection]()
 
 if __name__ == '__main__':

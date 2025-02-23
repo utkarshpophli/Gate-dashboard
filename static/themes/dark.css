@@ -1,0 +1,307 @@
+/* dark.css */
+
+/* Main Theme Colors and Variables */
+:root {
+    /* Background Colors */
+    --bg-primary: #121212;
+    --bg-secondary: #1e1e1e;
+    --bg-tertiary: #2d2d2d;
+    --bg-elevated: #333333;
+    
+    /* Text Colors */
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --text-tertiary: #707070;
+    --text-disabled: #505050;
+    
+    /* Accent Colors */
+    --accent-primary: #2196f3;
+    --accent-secondary: #1976d2;
+    --accent-hover: #1565c0;
+    --accent-muted: rgba(33, 150, 243, 0.1);
+    
+    /* Status Colors */
+    --success: #4caf50;
+    --warning: #ff9800;
+    --error: #f44336;
+    --info: #03a9f4;
+    
+    /* Border Colors */
+    --border-primary: #404040;
+    --border-secondary: #333333;
+    --border-hover: #505050;
+    
+    /* Shadow Effects */
+    --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+}
+
+/* Global Dark Theme Styles */
+[data-testid="stApp"] {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* Sidebar Styling */
+[data-testid="stSidebar"] {
+    background-color: var(--bg-secondary);
+    border-right: 1px solid var(--border-primary);
+}
+
+[data-testid="stSidebar"] [data-testid="stMarkdown"] {
+    color: var(--text-primary);
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary);
+}
+
+/* Text Elements */
+p, span, label {
+    color: var(--text-primary);
+}
+
+/* Input Elements */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea,
+.stSelectbox > div > div > select {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-primary) !important;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus,
+.stSelectbox > div > div > select:focus {
+    border-color: var(--accent-primary) !important;
+    box-shadow: 0 0 0 1px var(--accent-primary) !important;
+}
+
+/* Buttons */
+.stButton > button {
+    background-color: var(--accent-primary);
+    color: white;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.stButton > button:hover {
+    background-color: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+/* DataFrames and Tables */
+[data-testid="stDataFrame"] {
+    background-color: var(--bg-secondary) !important;
+}
+
+.dataframe {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+}
+
+.dataframe th {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    border-bottom: 2px solid var(--border-primary) !important;
+}
+
+.dataframe td {
+    border-bottom: 1px solid var(--border-secondary) !important;
+    color: var(--text-secondary) !important;
+}
+
+.dataframe tr:hover {
+    background-color: var(--bg-elevated) !important;
+}
+
+/* Charts and Plots */
+[data-testid="stPlotlyChart"] {
+    background-color: var(--bg-secondary) !important;
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+/* Metrics */
+[data-testid="stMetric"] {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.stMetric-value {
+    color: var(--accent-primary) !important;
+}
+
+/* Messages and Alerts */
+.stSuccess, .stInfo, .stWarning, .stError {
+    color: white !important;
+    border-radius: 4px;
+    padding: 16px;
+}
+
+.stSuccess {
+    background-color: var(--success) !important;
+}
+
+.stInfo {
+    background-color: var(--info) !important;
+}
+
+.stWarning {
+    background-color: var(--warning) !important;
+}
+
+.stError {
+    background-color: var(--error) !important;
+}
+
+/* Expander */
+.streamlit-expanderHeader {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-primary) !important;
+}
+
+.streamlit-expanderContent {
+    background-color: var(--bg-tertiary) !important;
+    border: 1px solid var(--border-primary) !important;
+}
+
+/* File Uploader */
+[data-testid="stFileUploader"] {
+    background-color: var(--bg-secondary) !important;
+    border: 2px dashed var(--border-primary) !important;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-elevated);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* Code Blocks */
+.stCodeBlock {
+    background-color: var(--bg-tertiary) !important;
+    border: 1px solid var(--border-primary) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Radio Buttons */
+.stRadio > label {
+    color: var(--text-primary) !important;
+}
+
+/* Checkboxes */
+.stCheckbox > label {
+    color: var(--text-primary) !important;
+}
+
+/* Tooltips */
+.tooltip {
+    background-color: var(--bg-elevated) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border-primary) !important;
+    box-shadow: var(--shadow-md);
+}
+
+/* Progress Bars */
+.stProgress > div > div > div {
+    background-color: var(--accent-primary) !important;
+}
+
+/* Chat Messages */
+.chat-message {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 8px 0;
+}
+
+.user-message {
+    background-color: var(--accent-muted);
+    border-color: var(--accent-primary);
+}
+
+/* Calendar Styling */
+.calendar-day {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+}
+
+.calendar-day:hover {
+    background-color: var(--bg-elevated);
+    border-color: var(--accent-primary);
+}
+
+.calendar-day.today {
+    background-color: var(--accent-muted);
+    border-color: var(--accent-primary);
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Media Queries for Dark Theme */
+@media (max-width: 768px) {
+    [data-testid="stSidebar"] {
+        background-color: var(--bg-primary);
+    }
+    
+    .stMetric-value {
+        font-size: 1.2rem !important;
+    }
+}
+
+/* Selection Color */
+::selection {
+    background-color: var(--accent-muted);
+    color: var(--text-primary);
+}
+
+/* Focus Styles */
+*:focus {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+/* Disabled States */
+[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

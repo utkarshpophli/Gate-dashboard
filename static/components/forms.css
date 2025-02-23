@@ -1,0 +1,23 @@
+.stTextInput > div > div > input {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    padding: var(--spacing-sm);
+}
+
+.stTextArea > div > div > textarea {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    padding: var(--spacing-sm);
+}
+
+.stSelectbox > div > div > select {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    padding: var(--spacing-sm);
+}

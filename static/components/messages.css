@@ -1,0 +1,39 @@
+.stSuccess {
+    background-color: var(--success);
+    color: white;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin: var(--spacing-md) 0;
+    animation: slideIn var(--transition-normal);
+}
+
+.stError {
+    background-color: var(--error);
+    color: white;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin: var(--spacing-md) 0;
+    animation: slideIn var(--transition-normal);
+}
+
+.stWarning {
+    background-color: #f39c12;
+    color: white;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin: var(--spacing-md) 0;
+    animation: slideIn var(--transition-normal);
+}
+
+.stInfo {
+    background-color: var(--accent-primary);
+    color: white;
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    margin: var(--spacing-md) 0;
+    animation: slideIn var(--transition-normal);
+}
+
+.message-icon {
+    margin-right: var(--spacing-sm);
+}

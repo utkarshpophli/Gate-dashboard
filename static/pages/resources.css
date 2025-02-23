@@ -1,0 +1,32 @@
+.resources-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.resource-card {
+    background: var(--bg-secondary);
+    padding: var(--spacing-md);
+    border-radius: var(--radius-md);
+    transition: transform var(--transition-fast);
+}
+
+.resource-card:hover {
+    transform: translateY(-2px);
+}
+
+.resource-icon {
+    font-size: var(--font-size-xl);
+    margin-bottom: var(--spacing-sm);
+    color: var(--accent-primary);
+}
+
+.resource-title {
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+}
+
+.resource-description {
+    color: var(--text-secondary);
+    font-size: var(--font-size-sm);
+}

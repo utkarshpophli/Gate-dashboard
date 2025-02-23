@@ -1,0 +1,57 @@
+.calendar-container {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    margin: var(--spacing-md) 0;
+}
+
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: var(--spacing-sm);
+}
+
+.calendar-day {
+    aspect-ratio: 1;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-sm);
+    position: relative;
+    transition: all var(--transition-fast);
+}
+
+.calendar-day:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-sm);
+}
+
+.day-number {
+    position: absolute;
+    top: var(--spacing-xs);
+    left: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+    color: var(--text-primary);
+}
+
+.day-content {
+    margin-top: 25px;
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+}
+
+.study-day {
+    background: var(--bg-tertiary);
+    border: 2px solid var(--accent-primary);
+}
+
+.current-day {
+    background: var(--accent-secondary);
+}
