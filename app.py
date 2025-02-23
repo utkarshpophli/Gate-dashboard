@@ -32,7 +32,11 @@ supabase: Client = create_client(
     supabase_url=st.secrets["SUPABASE_URL"],
     supabase_key=st.secrets["SUPABASE_KEY"]
 )
-# st.set_page_config(page_title="GATE DA 2026 Dashboard", layout="wide")
+st.set_page_config(
+        page_title="GATE DA 2026 Dashboard",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
 
 # Optional: for PDF and image text extraction
 try:
@@ -1752,12 +1756,6 @@ def main():
     # Load base CSS
     load_css()
     
-    # Set page config
-    st.set_page_config(
-        page_title="GATE DA 2026 Dashboard",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
     
     # Navigation
     pages = {
@@ -1784,6 +1782,4 @@ def main():
     pages[selection]()
 
 if __name__ == '__main__':
-    init_db()
-    load_css()
     main()
