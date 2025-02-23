@@ -644,7 +644,7 @@ def dashboard_page():
             session_date = st.date_input("Date", datetime.date.today())
             selected_phase = st.selectbox("Select Phase", phase_options)
             selected_subject = st.selectbox("Subject", SUBJECT_LIST)
-            hours = st.number_input("Hours Studied", min_value=0.0, step=0.5)
+            hours = st.number_input("Hours Studied", min_value=0.0)
             notes = st.text_area("Notes / Reflection")
             submitted = st.form_submit_button("Log Session")
             
@@ -655,8 +655,8 @@ def dashboard_page():
                     
                     if success:
                         st.success("Study session logged successfully!")
-                        time.sleep(0.5)  # Brief pause
-                        st.rerun()  # Refresh the page
+                        time.sleep(0.5)
+                        st.rerun()
                     
                 except Exception as e:
                     st.error(f"Error logging session: {str(e)}")
@@ -667,7 +667,10 @@ def dashboard_page():
 
     # Display existing logs
     try:
-        logs_response = supabase.table('progress_logs').select('*').order('date', desc=True).execute()
+        # Select only the required columns in the desired order
+        logs_response = supabase.table('progress_logs').select(
+            'id,date,phase,subject,hours,notes'
+        ).order('date', desc=True).execute()
         
         if isinstance(logs_response.data, list) and len(logs_response.data) > 0:
             st.header("Study Sessions Log")
@@ -678,11 +681,16 @@ def dashboard_page():
             df_logs = df_logs.sort_values('date', ascending=False)
             df_logs['date'] = df_logs['date'].dt.strftime('%Y-%m-%d')
             
-            # Display the dataframe
+            # Ensure columns are in the correct order
+            columns_order = ['id', 'date', 'phase', 'subject', 'hours', 'notes']
+            df_logs = df_logs[columns_order]
+            
+            # Display the dataframe with formatted columns
             st.dataframe(
                 df_logs,
                 hide_index=True,
                 column_config={
+                    "id": "ID",
                     "date": "Date",
                     "phase": "Phase",
                     "subject": "Subject",
@@ -705,7 +713,7 @@ def dashboard_page():
             
     except Exception as e:
         st.error(f"Error loading logs: {str(e)}")
-                        
+
 def analytics_page():
     st.title("Progress Analytics")
     
