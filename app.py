@@ -326,50 +326,26 @@ def init_db():
 def insert_progress_log(date_str, phase, subject, hours, notes):
     """Inserts a new progress log."""
     try:
-        # Validate hours
-        hours = float(hours)
-        if hours < 0:
-            st.error("Study hours cannot be negative")
-            return False
-            
-        # Create the data dictionary
+        # Create the data dictionary with only needed fields
         data = {
             'date': date_str,
             'phase': phase,
             'subject': subject,
-            'hours': hours,
+            'hours': float(hours),
             'notes': notes
         }
         
-        # Use direct table insert
+        # Insert the data
         response = supabase.table('progress_logs').insert(data).execute()
         
-        # Check if the response contains data (successful insert)
         if isinstance(response.data, list) and len(response.data) > 0:
             return True
         return False
             
-    except ValueError:
-        st.error("Invalid hours value")
-        return False
     except Exception as e:
         st.error(f"Error inserting progress log: {str(e)}")
         return False
-
-# def get_progress_logs():
-#     """Retrieves all progress logs with proper RLS handling."""
-#     try:
-#         # Use rpc call to bypass RLS if needed
-#         response = supabase.rpc(
-#             'get_progress_logs_secure'
-#         ).execute()
         
-#         return response.data if hasattr(response, 'data') else []
-        
-#     except Exception as e:
-#         st.error(f"Error fetching progress logs: {str(e)}")
-#         return []
-
 def update_schedule_db(phase, new_table):
     data = {"schedule_json": json.dumps(new_table)}
     result = supabase.table("schedule").update(data).eq("phase", phase).execute()
@@ -403,8 +379,11 @@ def get_all_schedules():
 def get_progress_logs():
     """Retrieves all progress logs."""
     try:
-        response = supabase.table('progress_logs').select('*').execute()
-        return response.data if not response.error else []
+        response = supabase.table('progress_logs').select(
+            'id,date,phase,subject,hours,notes'
+        ).order('date', desc=True).execute()
+        
+        return response.data if hasattr(response, 'data') else []
     except Exception as e:
         st.error(f"Error fetching progress logs: {str(e)}")
         return []
@@ -657,7 +636,8 @@ def dashboard_page():
                 "Hours Studied",
                 min_value=0.0,
                 max_value=24.0,
-                value=0.0
+                value=0.0,
+                step=0.5
             )
             notes = st.text_area("Notes / Reflection")
             submitted = st.form_submit_button("Log Session")
@@ -669,8 +649,8 @@ def dashboard_page():
                     
                     if success:
                         st.success("Study session logged successfully!")
-                        time.sleep(0.5)  # Brief pause
-                        st.rerun()  # Refresh the page
+                        time.sleep(0.5)
+                        st.rerun()
                     
                 except Exception as e:
                     st.error(f"Error logging session: {str(e)}")
@@ -681,7 +661,10 @@ def dashboard_page():
 
     # Display existing logs
     try:
-        logs_response = supabase.table('progress_logs').select('*').order('date', desc=True).execute()
+        # Select only the required columns
+        logs_response = supabase.table('progress_logs').select(
+            'id,date,phase,subject,hours,notes'
+        ).order('date', desc=True).execute()
         
         if isinstance(logs_response.data, list) and len(logs_response.data) > 0:
             st.header("Study Sessions Log")
@@ -692,10 +675,16 @@ def dashboard_page():
             df_logs = df_logs.sort_values('date', ascending=False)
             df_logs['date'] = df_logs['date'].dt.strftime('%Y-%m-%d')
             
+            # Ensure columns are in the correct order
+            columns_order = ['id', 'date', 'phase', 'subject', 'hours', 'notes']
+            df_logs = df_logs[columns_order]
+            
             # Display the dataframe
             st.dataframe(
+                df_logs,
                 hide_index=True,
                 column_config={
+                    "id": st.column_config.NumberColumn("ID"),
                     "date": "Date",
                     "phase": "Phase",
                     "subject": "Subject",
@@ -707,18 +696,9 @@ def dashboard_page():
                 }
             )
             
-            # Show summary statistics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Study Hours", f"{df_logs['hours'].sum():.1f}")
-            with col2:
-                st.metric("Total Sessions", len(df_logs))
-            with col3:
-                st.metric("Average Hours/Session", f"{df_logs['hours'].mean():.1f}")
-            
     except Exception as e:
         st.error(f"Error loading logs: {str(e)}")
-                        
+
 def analytics_page():
     st.title("Progress Analytics")
     
