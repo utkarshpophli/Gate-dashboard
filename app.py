@@ -111,6 +111,18 @@ def create_header():
     else:
         st.error("Logo file not found!")
 
+def set_favicon():
+    """Set a custom favicon"""
+    favicon_path = Path("static/images/logos/app-logo.png")
+    if favicon_path.exists():
+        import base64
+        with open(favicon_path, "rb") as f:
+            favicon_data = base64.b64encode(f.read()).decode()
+        
+        favicon_html = f"""
+            <link rel="shortcut icon" href="data:image/png;base64,{favicon_data}">
+        """
+        st.markdown(favicon_html, unsafe_allow_html=True)
 
 # ============================
 # 1. Database Setup & Helpers
@@ -1780,7 +1792,7 @@ def chat_assistant_page():
 def main():
     # Load base CSS
     load_css()
-    create_header()
+    # create_header()
     
     
     # Navigation
@@ -1808,4 +1820,5 @@ def main():
     pages[selection]()
 
 if __name__ == '__main__':
+    set_favicon()
     main()
