@@ -356,19 +356,19 @@ def insert_progress_log(date_str, phase, subject, hours, notes):
         st.error(f"Error inserting progress log: {str(e)}")
         return False
 
-def get_progress_logs():
-    """Retrieves all progress logs with proper RLS handling."""
-    try:
-        # Use rpc call to bypass RLS if needed
-        response = supabase.rpc(
-            'get_progress_logs_secure'
-        ).execute()
+# def get_progress_logs():
+#     """Retrieves all progress logs with proper RLS handling."""
+#     try:
+#         # Use rpc call to bypass RLS if needed
+#         response = supabase.rpc(
+#             'get_progress_logs_secure'
+#         ).execute()
         
-        return response.data if hasattr(response, 'data') else []
+#         return response.data if hasattr(response, 'data') else []
         
-    except Exception as e:
-        st.error(f"Error fetching progress logs: {str(e)}")
-        return []
+#     except Exception as e:
+#         st.error(f"Error fetching progress logs: {str(e)}")
+#         return []
 
 def update_schedule_db(phase, new_table):
     data = {"schedule_json": json.dumps(new_table)}
@@ -400,14 +400,14 @@ def get_all_schedules():
         return {}
         
 
-# def get_progress_logs():
-#     """Retrieves all progress logs."""
-#     try:
-#         response = supabase.table('progress_logs').select('*').execute()
-#         return response.data if not response.error else []
-#     except Exception as e:
-#         st.error(f"Error fetching progress logs: {str(e)}")
-#         return []
+def get_progress_logs():
+    """Retrieves all progress logs."""
+    try:
+        response = supabase.table('progress_logs').select('*').execute()
+        return response.data if not response.error else []
+    except Exception as e:
+        st.error(f"Error fetching progress logs: {str(e)}")
+        return []
 
 def insert_question(subject, question, answer):
     """Inserts a new question into the question bank."""
