@@ -1,0 +1,220 @@
+/* dark-theme.css */
+
+/* Global Styles */
+[data-testid="stAppViewContainer"] {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Sidebar Styling */
+[data-testid="stSidebar"] {
+    background-color: #2d2d2d;
+    padding: 2rem 1rem;
+}
+
+[data-testid="stSidebar"] [data-testid="stMarkdown"] {
+    color: #e0e0e0;
+}
+
+/* Navigation Radio Buttons */
+.stRadio > label {
+    color: #e0e0e0 !important;
+    font-weight: 500;
+    padding: 0.5rem 0;
+}
+
+/* Headers */
+h1 {
+    color: #e0e0e0;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 3px solid #2196f3;
+}
+
+h2, h3 {
+    color: #e0e0e0;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Cards and Containers */
+[data-testid="stMetric"] {
+    background-color: #2d2d2d;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    color: #e0e0e0;
+}
+
+.stMetric-value {
+    color: #2196f3;
+    font-weight: 700;
+}
+
+/* Forms and Inputs */
+.stTextInput > div > div > input {
+    background-color: #333333;
+    color: #e0e0e0;
+    border-radius: 4px;
+    border: 1px solid #444444;
+    padding: 0.5rem;
+}
+
+.stTextArea > div > div > textarea {
+    background-color: #333333;
+    color: #e0e0e0;
+    border-radius: 4px;
+    border: 1px solid #444444;
+    padding: 0.5rem;
+}
+
+/* Buttons */
+.stButton > button {
+    background-color: #2196f3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: background-color 0.3s;
+}
+
+.stButton > button:hover {
+    background-color: #1976d2;
+}
+
+/* Success/Error Messages */
+.stSuccess {
+    background-color: #43a047;
+    color: white;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+}
+
+.stError {
+    background-color: #d32f2f;
+    color: white;
+    padding: 0.75rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+}
+
+/* DataFrames */
+[data-testid="stDataFrame"] {
+    border: 1px solid #444444;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.dataframe {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+.dataframe th {
+    background-color: #1a1a1a;
+    color: #e0e0e0;
+    padding: 0.75rem;
+    text-align: left;
+}
+
+.dataframe td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #444444;
+}
+
+/* Charts and Visualizations */
+[data-testid="stPlotlyChart"] {
+    background-color: #2d2d2d;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    margin: 1rem 0;
+}
+
+/* Expanders */
+.streamlit-expander {
+    border: 1px solid #444444;
+    border-radius: 8px;
+    margin: 0.5rem 0;
+    background-color: #2d2d2d;
+}
+
+/* Progress Bars */
+.stProgress > div > div > div {
+    background-color: #2196f3;
+}
+
+/* File Uploader */
+[data-testid="stFileUploader"] {
+    background-color: #2d2d2d;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 2px dashed #444444;
+}
+
+/* Add these to dark-theme.css */
+
+/* Chat Messages */
+[data-testid="stChatMessage"] {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.user-message {
+    background-color: #1a365d;
+    margin-left: 2rem;
+}
+
+.assistant-message {
+    background-color: #333333;
+    margin-right: 2rem;
+}
+
+/* Timer Display */
+.timer-display {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #e0e0e0;
+    text-align: center;
+    padding: 2rem;
+    background-color: #2d2d2d;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Tooltips */
+.tooltip {
+    background-color: #333333;
+    color: #e0e0e0;
+    border: 1px solid #444444;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #444444;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}

@@ -1,0 +1,187 @@
+/* calendar.css */
+
+/* Calendar Container */
+.calendar-view {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    margin: 20px 0;
+}
+
+/* Calendar Navigation */
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.month-selector {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.view-toggles {
+    display: flex;
+    gap: 10px;
+}
+
+.view-toggle-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: #f8f9fa;
+    color: #495057;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.view-toggle-btn.active {
+    background: #3498db;
+    color: white;
+}
+
+/* Calendar Grid */
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+}
+
+/* Calendar Day Headers */
+.calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.weekday-header {
+    text-align: center;
+    font-weight: 600;
+    color: #2c3e50;
+    padding: 10px;
+}
+
+/* Calendar Day Cell */
+.calendar-day {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 120px;
+    transition: all 0.3s ease;
+}
+
+.calendar-day:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.calendar-day.today {
+    background: #fff4e6;
+    border: 2px solid #f76707;
+}
+
+.calendar-day.has-events {
+    background: #e8f4f8;
+    border: 2px solid #3498db;
+}
+
+/* Day Content */
+.day-number {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 5px;
+}
+
+.day-content {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+/* Study Hours Badge */
+.hours-badge {
+    background: #3498db;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    display: inline-block;
+    margin-top: 5px;
+}
+
+/* Subject Tags */
+.subject-tag {
+    background: #e9ecef;
+    color: #495057;
+    padding: 2px 6px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    margin: 2px;
+    display: inline-block;
+}
+
+/* Daily List View */
+.daily-list {
+    background: white;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.daily-list-header {
+    background: #f8f9fa;
+    padding: 15px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.daily-list-content {
+    padding: 15px;
+}
+
+/* Weekly Summary */
+.weekly-summary {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.weekly-chart {
+    margin-top: 20px;
+    height: 300px;
+}
+
+/* Statistics Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.stat-card {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #3498db;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-top: 5px;
+}

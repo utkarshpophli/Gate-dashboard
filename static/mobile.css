@@ -1,0 +1,139 @@
+/* mobile.css */
+
+@media screen and (max-width: 768px) {
+    /* Global Adjustments */
+    body {
+        font-size: 14px;
+    }
+
+    /* Header Adjustments */
+    h1 {
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    h2 {
+        font-size: 1.3rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+    }
+
+    /* Sidebar Adjustments */
+    [data-testid="stSidebar"] {
+        padding: 1rem 0.5rem;
+    }
+
+    /* Calendar View Adjustments */
+    .calendar-view {
+        padding: 10px;
+        margin: 10px 0;
+    }
+
+    .calendar-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .view-toggles {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .calendar-grid {
+        gap: 5px;
+    }
+
+    .calendar-day {
+        min-height: 80px;
+        padding: 5px;
+    }
+
+    .day-number {
+        font-size: 0.9rem;
+    }
+
+    .day-content {
+        font-size: 0.8rem;
+    }
+
+    .hours-badge {
+        font-size: 0.7rem;
+        padding: 1px 6px;
+    }
+
+    /* Stats Grid Adjustment */
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Form Elements */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea {
+        font-size: 14px;
+    }
+
+    /* Buttons */
+    .stButton > button {
+        width: 100%;
+        padding: 0.8rem;
+    }
+
+    /* DataFrames */
+    .dataframe th,
+    .dataframe td {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    /* Chat Messages */
+    [data-testid="stChatMessage"] {
+        padding: 0.8rem;
+        margin: 0.4rem 0;
+    }
+
+    /* Timer Display */
+    .timer-display {
+        font-size: 2rem;
+        padding: 1.5rem;
+    }
+}
+
+/* Small Mobile Devices */
+@media screen and (max-width: 480px) {
+    /* Calendar Further Adjustments */
+    .calendar-day {
+        min-height: 60px;
+        padding: 3px;
+    }
+
+    .day-number {
+        font-size: 0.8rem;
+    }
+
+    .day-content {
+        font-size: 0.7rem;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    /* Buttons */
+    .view-toggle-btn {
+        padding: 6px 12px;
+        font-size: 0.9rem;
+    }
+
+    /* Headers */
+    h1 {
+        font-size: 1.3rem;
+    }
+
+    /* Metrics */
+    .stMetric-value {
+        font-size: 1.2rem;
+    }
+}
