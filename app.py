@@ -25,6 +25,7 @@ from azure.ai.inference.models import (
 )
 from azure.core.credentials import AzureKeyCredential
 from supabase import create_client, Client
+from streamlit_calendar import calendar
 
 load_dotenv()
 # engine = sqlalchemy.create_engine(DATABASE_URL)
@@ -1195,204 +1196,119 @@ def calendar_view_page():
         
         df_logs = pd.DataFrame(logs_response.data)
         
-        # Ensure we have valid dates
+        # Convert date strings to datetime
         df_logs['date'] = pd.to_datetime(df_logs['date'])
         
-        if len(df_logs) == 0:
-            st.warning("No study sessions found. Please log some study sessions first.")
-            return
-            
-        # Calendar Navigation
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            # Get min and max dates with fallback
-            today = pd.Timestamp.now()
-            min_date = df_logs['date'].min()
-            max_date = df_logs['date'].max()
-            
-            # Create month range
-            date_range = pd.date_range(
-                start=min_date.replace(day=1),
-                end=max_date + pd.offsets.MonthEnd(0),
-                freq='M'
-            )
-            
-            # Format months for selection
-            month_options = [d.strftime('%B %Y') for d in date_range]
-            
-            if not month_options:
-                month_options = [today.strftime('%B %Y')]
-            
-            selected_month_str = st.selectbox(
-                "Select Month",
-                options=month_options,
-                index=len(month_options)-1
-            )
-            
-            # Convert selected month string back to datetime
-            selected_month = pd.to_datetime(selected_month_str + "-01")
-        
-        with col2:
-            view_type = st.radio(
-                "View Type",
-                ["Monthly Calendar", "Daily List", "Weekly Summary"],
-                horizontal=True
-            )
-        
-        # Filter data for selected month
-        month_mask = (
-            (df_logs['date'].dt.year == selected_month.year) & 
-            (df_logs['date'].dt.month == selected_month.month)
-        )
-        month_data = df_logs[month_mask]
-        
-        if view_type == "Monthly Calendar":
-            # Create calendar grid
-            st.markdown("### Monthly Calendar")
-            
-            # Get the first day of the month and last day
-            first_day = selected_month.replace(day=1)
-            last_day = (first_day + pd.offsets.MonthEnd(0))
-            
-            # Create calendar weeks
-            current_date = first_day - pd.Timedelta(days=first_day.weekday())
-            
-            # Display weekday headers
-            cols = st.columns(7)
-            for i, day in enumerate(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']):
-                cols[i].markdown(f"**{day}**", help="Click for daily details")
-            
-            # Display calendar grid
-            while current_date <= last_day + pd.Timedelta(days=6):
-                cols = st.columns(7)
-                for i in range(7):
-                    with cols[i]:
-                        if current_date.month == selected_month.month:
-                            # Get data for this date
-                            day_data = month_data[month_data['date'].dt.date == current_date.date()]
-                            total_hours = day_data['hours'].sum()
-                            subjects = day_data['subject'].nunique()
-                            
-                            # Create day cell
-                            if len(day_data) > 0:
-                                st.markdown(
-                                    f"""
-                                    <div style="
-                                        padding: 10px;
-                                        border: 1px solid #ddd;
-                                        border-radius: 5px;
-                                        background-color: #f0f2f6;
-                                        text-align: center;
-                                    ">
-                                        <h4>{current_date.day}</h4>
-                                        <p>{total_hours:.1f}h<br>{subjects} subjects</p>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True
-                                )
-                                
-                                # Show details in expander
-                                with st.expander("Details", expanded=False):
-                                    st.dataframe(
-                                        day_data[['subject', 'hours', 'notes']].reset_index(drop=True),
-                                        height=100
-                                    )
-                            else:
-                                st.markdown(
-                                    f"""
-                                    <div style="
-                                        padding: 10px;
-                                        border: 1px solid #eee;
-                                        border-radius: 5px;
-                                        text-align: center;
-                                        color: #666;
-                                    ">
-                                        <h4>{current_date.day}</h4>
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True
-                                )
-                        else:
-                            st.markdown("")  # Empty cell for days outside current month
-                    current_date += pd.Timedelta(days=1)
-        
-        elif view_type == "Daily List":
-            st.markdown("### Daily Study Sessions")
-            
-            if len(month_data) == 0:
-                st.info(f"No study sessions recorded for {selected_month_str}")
-            else:
-                for date in sorted(month_data['date'].dt.date.unique(), reverse=True):
-                    day_data = month_data[month_data['date'].dt.date == date]
-                    total_hours = day_data['hours'].sum()
-                    subjects = day_data['subject'].nunique()
-                    
-                    with st.expander(
-                        f"{date.strftime('%A, %B %d')} - {total_hours:.1f}h ({subjects} subjects)"
-                    ):
-                        st.dataframe(
-                            day_data[['subject', 'hours', 'phase', 'notes']].reset_index(drop=True)
-                        )
-        
-        else:  # Weekly Summary
-            st.markdown("### Weekly Summary")
-            
-            if len(month_data) == 0:
-                st.info(f"No study sessions recorded for {selected_month_str}")
-            else:
-                # Create weekly summary
-                month_data['week'] = month_data['date'].dt.isocalendar().week
-                weekly_summary = month_data.groupby('week').agg({
-                    'hours': 'sum',
-                    'subject': 'nunique',
-                    'date': 'nunique'
-                }).reset_index()
-                
-                weekly_summary.columns = ['Week', 'Total Hours', 'Unique Subjects', 'Days Studied']
-                
-                # Display summary table
-                st.dataframe(weekly_summary)
-                
-                # Create weekly chart
-                fig = px.bar(
-                    weekly_summary,
-                    x='Week',
-                    y='Total Hours',
-                    title='Weekly Study Hours',
-                    labels={'Total Hours': 'Hours', 'Week': 'Week of Month'}
-                )
-                st.plotly_chart(fig, use_container_width=True)
-        
-        # Monthly Statistics
-        st.markdown("### Monthly Statistics")
+        # Prepare calendar events
+        calendar_events = []
+        for _, row in df_logs.iterrows():
+            event = {
+                'id': str(row['id']),
+                'title': f"{row['subject']} ({row['hours']}h)",
+                'start': row['date'].strftime('%Y-%m-%d'),
+                'end': row['date'].strftime('%Y-%m-%d'),
+                'description': row['notes'] if pd.notna(row['notes']) else '',
+                'backgroundColor': '#1f77b4',  # You can customize colors
+                'textColor': '#ffffff',
+                'extendedProps': {
+                    'phase': row['phase'],
+                    'hours': row['hours'],
+                    'subject': row['subject']
+                }
+            }
+            calendar_events.append(event)
+
+        # Calendar options
+        calendar_options = {
+            "headerToolbar": {
+                "left": "today prev,next",
+                "center": "title",
+                "right": "dayGridMonth,timeGridWeek,timeGridDay"
+            },
+            "initialView": "dayGridMonth",
+            "selectable": True,
+            "selectMirror": True,
+            "dayMaxEvents": True,
+            "weekNumbers": True,
+            "navLinks": True,
+            "editable": False,
+            "eventLimit": True,
+            "events": calendar_events
+        }
+
+        # Display calendar
+        calendar(calendar_options=calendar_options, key="study_calendar")
+
+        # Display summary statistics
+        st.markdown("### Study Statistics")
         col1, col2, col3, col4 = st.columns(4)
         
-        total_hours = month_data['hours'].sum() if len(month_data) > 0 else 0
-        study_days = len(month_data['date'].dt.date.unique()) if len(month_data) > 0 else 0
-        subjects = month_data['subject'].nunique() if len(month_data) > 0 else 0
+        total_hours = df_logs['hours'].sum()
+        study_days = len(df_logs['date'].unique())
+        subjects = df_logs['subject'].nunique()
         avg_hours = total_hours / study_days if study_days > 0 else 0
         
         with col1:
-            st.metric("Total Hours", f"{total_hours:.1f}")
+            st.metric("Total Study Hours", f"{total_hours:.1f}")
         with col2:
-            st.metric("Study Days", study_days)
+            st.metric("Days Studied", study_days)
         with col3:
             st.metric("Subjects Covered", subjects)
         with col4:
             st.metric("Avg Hours/Day", f"{avg_hours:.1f}")
+
+        # Add subject-wise breakdown
+        st.markdown("### Subject-wise Breakdown")
+        subject_summary = df_logs.groupby('subject').agg({
+            'hours': ['sum', 'count'],
+            'date': 'nunique'
+        }).round(2)
         
-        # Monthly Progress Chart
-        if len(month_data) > 0:
-            daily_hours = month_data.groupby('date')['hours'].sum().reset_index()
-            fig = px.line(
-                daily_hours,
-                x='date',
-                y='hours',
-                title='Daily Study Hours this Month',
-                labels={'hours': 'Hours', 'date': 'Date'}
-            )
-            st.plotly_chart(fig, use_container_width=True)
+        subject_summary.columns = ['Total Hours', 'Sessions', 'Days']
+        subject_summary = subject_summary.reset_index()
+        subject_summary['Avg Hours/Session'] = (
+            subject_summary['Total Hours'] / subject_summary['Sessions']
+        ).round(2)
+        
+        # Display as an interactive table
+        st.dataframe(
+            subject_summary,
+            column_config={
+                "subject": "Subject",
+                "Total Hours": st.column_config.NumberColumn(
+                    "Total Hours",
+                    format="%.1f"
+                ),
+                "Sessions": st.column_config.NumberColumn(
+                    "Number of Sessions",
+                    format="%d"
+                ),
+                "Days": st.column_config.NumberColumn(
+                    "Days Studied",
+                    format="%d"
+                ),
+                "Avg Hours/Session": st.column_config.NumberColumn(
+                    "Avg Hours/Session",
+                    format="%.2f"
+                )
+            },
+            hide_index=True
+        )
+
+        # Add monthly trend
+        st.markdown("### Monthly Study Trend")
+        monthly_hours = df_logs.groupby(df_logs['date'].dt.strftime('%Y-%m'))[
+            'hours'
+        ].sum().reset_index()
+        
+        fig = px.bar(
+            monthly_hours,
+            x='date',
+            y='hours',
+            title='Monthly Study Hours',
+            labels={'date': 'Month', 'hours': 'Total Hours'}
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
     except Exception as e:
         st.error(f"Error in calendar view: {str(e)}")
