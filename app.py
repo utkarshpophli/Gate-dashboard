@@ -326,12 +326,18 @@ def init_db():
 def insert_progress_log(date_str, phase, subject, hours, notes):
     """Inserts a new progress log."""
     try:
+        # Validate hours
+        hours = float(hours)
+        if hours < 0:
+            st.error("Study hours cannot be negative")
+            return False
+            
         # Create the data dictionary
         data = {
             'date': date_str,
             'phase': phase,
             'subject': subject,
-            'hours': float(hours),
+            'hours': hours,
             'notes': notes
         }
         
@@ -343,6 +349,9 @@ def insert_progress_log(date_str, phase, subject, hours, notes):
             return True
         return False
             
+    except ValueError:
+        st.error("Invalid hours value")
+        return False
     except Exception as e:
         st.error(f"Error inserting progress log: {str(e)}")
         return False
@@ -391,14 +400,14 @@ def get_all_schedules():
         return {}
         
 
-def get_progress_logs():
-    """Retrieves all progress logs."""
-    try:
-        response = supabase.table('progress_logs').select('*').execute()
-        return response.data if not response.error else []
-    except Exception as e:
-        st.error(f"Error fetching progress logs: {str(e)}")
-        return []
+# def get_progress_logs():
+#     """Retrieves all progress logs."""
+#     try:
+#         response = supabase.table('progress_logs').select('*').execute()
+#         return response.data if not response.error else []
+#     except Exception as e:
+#         st.error(f"Error fetching progress logs: {str(e)}")
+#         return []
 
 def insert_question(subject, question, answer):
     """Inserts a new question into the question bank."""
@@ -644,7 +653,12 @@ def dashboard_page():
             session_date = st.date_input("Date", datetime.date.today())
             selected_phase = st.selectbox("Select Phase", phase_options)
             selected_subject = st.selectbox("Subject", SUBJECT_LIST)
-            hours = st.number_input("Hours Studied", min_value=0.0, step=0.5)
+            hours = st.number_input(
+                "Hours Studied",
+                min_value=0.0,
+                max_value=24.0,
+                value=0.0
+            )
             notes = st.text_area("Notes / Reflection")
             submitted = st.form_submit_button("Log Session")
             
