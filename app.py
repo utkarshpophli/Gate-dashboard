@@ -326,23 +326,25 @@ def init_db():
 def insert_progress_log(date_str, phase, subject, hours, notes):
     """Inserts a new progress log."""
     try:
-        # Use the RPC function instead of direct table insert
-        response = supabase.rpc(
-            'insert_progress_log_secure',
-            {
-                'p_date': date_str,
-                'p_phase': phase,
-                'p_subject': subject,
-                'p_hours': float(hours),
-                'p_notes': notes
-            }
-        ).execute()
+        # Create the data dictionary
+        data = {
+            'date': date_str,
+            'phase': phase,
+            'subject': subject,
+            'hours': float(hours),
+            'notes': notes
+        }
         
-        if not response.error:
+        # Use direct table insert instead of RPC
+        response = supabase.table('progress_logs').insert(data).execute()
+        
+        # Check if the response has data (successful insert)
+        if hasattr(response, 'data') and response.data:
             return True
         else:
-            st.error(f"Error logging progress: {response.error}")
+            st.error(f"Error logging progress: No data returned")
             return False
+            
     except Exception as e:
         st.error(f"Error inserting progress log: {str(e)}")
         return False
@@ -670,11 +672,15 @@ def dashboard_page():
             if submitted:
                 try:
                     date_str = session_date.strftime("%Y-%m-%d")
-                    if insert_progress_log(date_str, selected_phase, selected_subject, hours, notes):
+                    success = insert_progress_log(date_str, selected_phase, selected_subject, hours, notes)
+                    
+                    if success:
                         st.success("Study session logged successfully!")
+                        time.sleep(1)  # Give user time to see the success message
                         st.rerun()  # Refresh the page to show new data
                     else:
                         st.error("Failed to log study session")
+                        
                 except Exception as e:
                     st.error(f"Error logging session: {str(e)}")
     
@@ -685,13 +691,26 @@ def dashboard_page():
     # Display existing logs
     try:
         logs_response = supabase.table('progress_logs').select('*').order('date', desc=True).execute()
+        
         if hasattr(logs_response, 'data') and logs_response.data:
             st.header("Study Sessions Log")
             df_logs = pd.DataFrame(logs_response.data)
-            st.dataframe(df_logs.sort_values('date', ascending=False))
+            
+            # Convert date strings to datetime for proper sorting
+            df_logs['date'] = pd.to_datetime(df_logs['date'])
+            
+            # Sort and format for display
+            df_logs = df_logs.sort_values('date', ascending=False)
+            
+            # Format date back to string for display if needed
+            df_logs['date'] = df_logs['date'].dt.strftime('%Y-%m-%d')
+            
+            # Display the dataframe
+            st.dataframe(df_logs, hide_index=True)
+            
     except Exception as e:
         st.error(f"Error loading logs: {str(e)}")
-        
+                
 def analytics_page():
     st.title("Progress Analytics")
     
