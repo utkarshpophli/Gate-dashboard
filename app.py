@@ -679,29 +679,24 @@ def dashboard_page():
                     st.rerun()  # Refresh the page to show new data
                         
     
-
-    # Display existing logs
-    try:
-        logs_response = supabase.table('progress_logs').select('*').order('date', desc=True).execute()
+    logs_response = supabase.table('progress_logs').select('*').order('date', desc=True).execute()
+    
+    if hasattr(logs_response, 'data') and logs_response.data:
+        st.header("Study Sessions Log")
+        df_logs = pd.DataFrame(logs_response.data)
         
-        if hasattr(logs_response, 'data') and logs_response.data:
-            st.header("Study Sessions Log")
-            df_logs = pd.DataFrame(logs_response.data)
+        # Convert date strings to datetime for proper sorting
+        df_logs['date'] = pd.to_datetime(df_logs['date'])
+        
+        # Sort and format for display
+        df_logs = df_logs.sort_values('date', ascending=False)
+        
+        # Format date back to string for display if needed
+        df_logs['date'] = df_logs['date'].dt.strftime('%Y-%m-%d')
+        
+        # Display the dataframe
+        st.dataframe(df_logs, hide_index=True)
             
-            # Convert date strings to datetime for proper sorting
-            df_logs['date'] = pd.to_datetime(df_logs['date'])
-            
-            # Sort and format for display
-            df_logs = df_logs.sort_values('date', ascending=False)
-            
-            # Format date back to string for display if needed
-            df_logs['date'] = df_logs['date'].dt.strftime('%Y-%m-%d')
-            
-            # Display the dataframe
-            st.dataframe(df_logs, hide_index=True)
-            
-    except Exception as e:
-        st.error(f"Error loading logs: {str(e)}")
 
 def analytics_page():
     st.title("Progress Analytics")
