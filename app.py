@@ -32,11 +32,12 @@ supabase: Client = create_client(
     supabase_url=st.secrets["SUPABASE_URL"],
     supabase_key=st.secrets["SUPABASE_KEY"]
 )
+
 st.set_page_config(
-        page_title="GATE DA 2026 Dashboard",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    page_title="GATE DA 2026 Dashboard",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 # Optional: for PDF and image text extraction
 try:
