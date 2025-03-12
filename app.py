@@ -1727,7 +1727,7 @@ def rag_assistant_page():
             import requests
             
             endpoint = "https://models.inference.ai.azure.com"
-            model_name = "o1"
+            model_name = "o3-mini"
             
             st.info("Connecting to the O1 model...")
             
