@@ -1726,7 +1726,6 @@ def rag_assistant_page():
             
             # Prepare messages with the same structure as chat_assistant_page
             # But adapted for the RAG use case
-            from azure.ai.openai import SystemMessage, UserMessage
             
             # Create the pdf content message
             pdf_message = f"Please analyze this PDF document: data:application/pdf;base64,{file_content}"
@@ -1755,7 +1754,7 @@ def rag_assistant_page():
                     
         except Exception as e:
             st.error(f"Error in processing: {str(e)}")
-            
+
 def chat_assistant_page():
     st.title("Chat Assistant")
     st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
