@@ -591,7 +591,7 @@ def get_rag_context(selected_subject):
             ])
             context_parts.append("Revision Notes:\n" + n_text)
         
-        # Resources (uploaded PDFs/images)
+        # Resources (only using metadata, not extracting content)
         resources = get_all_resources()
         subject_resources = [
             r for r in resources 
@@ -599,11 +599,12 @@ def get_rag_context(selected_subject):
             and r["filename"]
         ]
         
-        for r in subject_resources:
-            if os.path.exists(r["filename"]):
-                extracted = extract_text_from_file(r["filename"])
-                if extracted:
-                    context_parts.append(f"Resource ({r['title']}):\n" + extracted)
+        if subject_resources:
+            r_text = "\n".join([
+                f"Resource: {r['title']} (File: {os.path.basename(r['filename'])})" 
+                for r in subject_resources
+            ])
+            context_parts.append("Available Resources:\n" + r_text)
         
         return "\n\n".join(context_parts)
     
@@ -1673,7 +1674,8 @@ def rag_assistant_page():
         key="rag_resource"
     )
     
-    extracted_content = ""
+    file_content = None
+    file_type = None
     
     if uploaded_file:
         try:
@@ -1688,26 +1690,14 @@ def rag_assistant_page():
             
             st.success("Resource uploaded successfully!")
             
-            # Process file based on type
-            ext = uploaded_file.name.split('.')[-1].lower()
-            if ext in ["png", "jpg", "jpeg"]:
-                try:
-                    # For O1 model with image support, we'll need to encode the image to base64
-                    import base64
-                    with open(file_path, "rb") as image_file:
-                        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-                    
-                    extracted_content = f"<image_content:{base64_image}>"
-                except Exception as e:
-                    st.error(f"Error processing image: {str(e)}")
-                    
-            elif ext == "pdf":
-                extracted_text = extract_text_from_file(file_path)
-                if extracted_text:
-                    extracted_content = f"Extracted text from PDF: {extracted_text}"
-                else:
-                    st.warning("No text could be extracted from the PDF.")
-                    
+            # Get file type and prepare for O1 model
+            file_type = uploaded_file.name.split('.')[-1].lower()
+            
+            # Read file for direct passing to model
+            with open(file_path, "rb") as file:
+                import base64
+                file_content = base64.b64encode(file.read()).decode('utf-8')
+                
         except Exception as e:
             st.error(f"Error handling uploaded file: {str(e)}")
     
@@ -1727,11 +1717,13 @@ def rag_assistant_page():
             return
         
         try:
-            # Prepare full prompt with context
+            # Prepare system message
             system_content = (
                 f"You are an expert revision assistant for the GATE exam.\n"
                 f"Subject: {selected_subject}\n"
                 f"Retrieved Context:\n{retrieval_context}\n"
+                f"If I provide you with images or PDFs, use your OCR and vision capabilities to analyze them "
+                f"and incorporate that information in your response."
             )
             
             # Initialize OpenAI client for O1 model
@@ -1753,11 +1745,30 @@ def rag_assistant_page():
                 }
             ]
             
-            # Add extracted content if available
-            if extracted_content:
+            # Add file content if available
+            if file_content and file_type:
+                content_type = ""
+                if file_type == "pdf":
+                    content_type = "application/pdf"
+                elif file_type in ["png", "jpg", "jpeg"]:
+                    content_type = f"image/{file_type}"
+                
+                # Add file as content part
                 messages.append({
-                    "role": "user", 
-                    "content": extracted_content
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please analyze this document for my subject:"
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{content_type};base64,{file_content}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
                 })
             
             # Add user query
