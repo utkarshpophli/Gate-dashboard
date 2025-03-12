@@ -1770,9 +1770,7 @@ def rag_assistant_page():
             with st.spinner("Generating response..."):
                 response = client.chat.completions.create(
                     messages=messages,
-                    model=model_name,
-                    temperature=0.7,
-                    top_p=0.95
+                    model=model_name
                 )
                 
                 if response.choices and hasattr(response.choices[0].message, 'content'):
