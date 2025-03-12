@@ -1665,7 +1665,7 @@ def rag_assistant_page():
     st.title("RAG Assistant")
     st.subheader("Upload a PDF and ask questions about its content")
     
-    # Get and verify token first using the same approach as chat_assistant_page
+    # Get and verify token first
     token = get_and_verify_token()
     if not token:
         st.warning("Please enter and verify your GitHub token above to proceed.")
@@ -1695,10 +1695,8 @@ def rag_assistant_page():
             
             st.success(f"PDF uploaded successfully: {uploaded_file.name}")
             
-            # Read file for direct passing to model
-            with open(file_path, "rb") as file:
-                import base64
-                file_content = base64.b64encode(file.read()).decode('utf-8')
+            # Just store the file path instead of base64 encoding the content
+            file_content = file_path
                 
         except Exception as e:
             st.error(f"Error handling uploaded file: {str(e)}")
@@ -1710,51 +1708,79 @@ def rag_assistant_page():
     
     if st.button("Generate Response") and user_query and file_content:
         try:
-            # Use the same client approach as chat_assistant_page
-            client = ChatCompletionsClient(
-                endpoint="https://models.inference.ai.azure.com",
-                credential=AzureKeyCredential(token),
-                api_version="2024-12-01-preview"
+            # If using Azure SDK, we need to convert to a different approach
+            # Let's use the OpenAI client which has better multimodal support
+            from openai import AzureOpenAI
+            
+            client = AzureOpenAI(
+                azure_endpoint="https://models.inference.ai.azure.com",
+                api_key=token,
+                api_version="2024-02-01" # Using a standard stable version
             )
             
-            # Prepare system message
-            system_content = (
-                "You are an expert assistant for analyzing PDF documents. "
-                "Use your OCR and vision capabilities to extract information from "
-                "the provided PDF and answer questions about its content."
-            )
+            # Read the PDF file as bytes
+            with open(file_content, "rb") as pdf_file:
+                pdf_bytes = pdf_file.read()
             
-            # Prepare messages with the same structure as chat_assistant_page
-            # But adapted for the RAG use case
+            # Convert to base64
+            import base64
+            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
             
-            # Create the pdf content message
-            pdf_message = f"Please analyze this PDF document: data:application/pdf;base64,{file_content}"
-            
-            # Prepare messages
+            # Create messages with proper multimodal content
             messages = [
-                SystemMessage(system_content),
-                UserMessage(pdf_message),
-                UserMessage(user_query)
+                {
+                    "role": "system",
+                    "content": "You are an expert assistant for analyzing PDF documents. Use your OCR and vision capabilities to extract information from the provided PDF and answer questions about its content."
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Please analyze this PDF document:"
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:application/pdf;base64,{pdf_base64}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": user_query
+                }
             ]
             
             # Get response with proper error handling
             with st.spinner("Analyzing PDF and generating response..."):
                 try:
-                    response = client.complete(
+                    # Make sure to use a vision-capable model
+                    response = client.chat.completions.create(
+                        model="o3-mini",
                         messages=messages,
-                        model="o3-mini"
+                        max_tokens=4000  # Set a reasonable limit
                     )
                     
-                    rag_reply = response.choices[0].message.content
-                    st.markdown("### Response")
-                    st.markdown(rag_reply)
+                    if response.choices and len(response.choices) > 0:
+                        rag_reply = response.choices[0].message.content
+                        st.markdown("### Response")
+                        st.markdown(rag_reply)
+                    else:
+                        st.error("No response content received from the model.")
                         
                 except Exception as e:
                     st.error(f"Error generating response: {str(e)}")
+                    import traceback
+                    st.error(traceback.format_exc())
                     
         except Exception as e:
             st.error(f"Error in processing: {str(e)}")
-
+            import traceback
+            st.error(traceback.format_exc())
+            
 def chat_assistant_page():
     st.title("Chat Assistant")
     st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
