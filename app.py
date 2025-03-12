@@ -1665,148 +1665,150 @@ def rag_assistant_page():
     st.title("RAG Assistant")
     st.subheader("Upload a PDF and ask questions about its content")
     
-    # Remove subject selection
+    # Get token from secrets or user input first
+    try:
+        token = st.secrets["api_keys"]["github_token"]
+        token_status = True
+    except:
+        token = st.text_input("Enter your API token:", type="password")
+        token_status = st.button("Verify Token")
     
-    st.markdown("#### Upload Resource (PDF)")
-    uploaded_file = st.file_uploader(
-        "Upload a PDF file", 
-        type=["pdf"], 
-        key="rag_resource"
-    )
-    
-    file_content = None
-    file_path = None
-    
-    if uploaded_file:
+    # Verify token before proceeding
+    if token and token_status:
         try:
-            # Create uploads directory if it doesn't exist
-            upload_folder = "uploads"
-            os.makedirs(upload_folder, exist_ok=True)
-            
-            # Save uploaded file
-            file_path = os.path.join(upload_folder, uploaded_file.name)
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            st.success(f"PDF uploaded successfully: {uploaded_file.name}")
-            
-            # Read file for direct passing to model
-            with open(file_path, "rb") as file:
-                import base64
-                file_content = base64.b64encode(file.read()).decode('utf-8')
-                
-        except Exception as e:
-            st.error(f"Error handling uploaded file: {str(e)}")
-    
-    # Get user query
-    user_query = st.text_input(
-        "Enter your question about the PDF content:"
-    )
-    
-    if st.button("Generate Response") and user_query and file_content:
-        # Get token from secrets
-        try:
-            token = st.secrets["api_keys"]["github_token"]
-        except:
-            token = st.text_input("Enter your API token:", type="password")
-            
-        if not token:
-            st.error("Please provide a valid API token to proceed.")
-            return
-        
-        try:
-            # Prepare system message
-            system_content = (
-                "You are an expert assistant for analyzing PDF documents. "
-                "Use your OCR and vision capabilities to extract information from "
-                "the provided PDF and answer questions about its content."
-            )
-            
-            # Initialize OpenAI client for O1 model with proper error handling
+            # Initialize OpenAI client to verify token
             from openai import OpenAI
             import requests
             
             endpoint = "https://models.inference.ai.azure.com"
-            model_name = "o3-mini"
             
-            st.info("Connecting to the O1 model...")
-            
-            # Add timeout and connection error handling
-            try:
-                client = OpenAI(
-                    base_url=endpoint,
-                    api_key=token
-                )
-                
-                # Test connection
-                client.models.list()  # This will throw an error if connection fails
-                st.success("Connection to O1 model established.")
-                
-            except requests.exceptions.ConnectionError as e:
-                st.error(f"Connection error: Could not connect to the API endpoint. Please check your internet connection and endpoint URL.")
-                st.error(f"Error details: {str(e)}")
-                return
-            except Exception as e:
-                st.error(f"API connection error: {str(e)}")
-                return
-            
-            # Prepare messages
-            messages = [
-                {
-                    "role": "system",
-                    "content": system_content
-                }
-            ]
-            
-            # Add PDF content
-            messages.append({
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Please analyze this PDF document:"
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:application/pdf;base64,{file_content}",
-                            "detail": "high"
-                        }
-                    }
-                ]
-            })
-            
-            # Add user query
-            messages.append({
-                "role": "user",
-                "content": user_query
-            })
-            
-            # Get response with proper error handling
-            with st.spinner("Analyzing PDF and generating response..."):
+            with st.spinner("Verifying API token..."):
                 try:
-                    response = client.chat.completions.create(
-                        messages=messages,
-                        model=model_name
+                    client = OpenAI(
+                        base_url=endpoint,
+                        api_key=token
                     )
                     
-                    if response.choices and hasattr(response.choices[0].message, 'content'):
-                        rag_reply = response.choices[0].message.content
-                        st.markdown("### Response")
-                        st.markdown(rag_reply)
-                    else:
-                        st.error("No response content received from the model.")
-                        
-                except requests.exceptions.Timeout:
-                    st.error("The request timed out. The server might be busy or the PDF might be too large.")
-                except requests.exceptions.ConnectionError:
-                    st.error("Connection error. Please check your internet connection and try again.")
-                except Exception as e:
-                    st.error(f"Error generating response: {str(e)}")
+                    # Test connection
+                    client.models.list()
+                    st.success("API token verified successfully!")
                     
+                    # Now show the file upload and query interface
+                    st.markdown("#### Upload Resource (PDF)")
+                    uploaded_file = st.file_uploader(
+                        "Upload a PDF file", 
+                        type=["pdf"], 
+                        key="rag_resource"
+                    )
+                    
+                    file_content = None
+                    file_path = None
+                    
+                    if uploaded_file:
+                        try:
+                            # Create uploads directory if it doesn't exist
+                            upload_folder = "uploads"
+                            os.makedirs(upload_folder, exist_ok=True)
+                            
+                            # Save uploaded file
+                            file_path = os.path.join(upload_folder, uploaded_file.name)
+                            with open(file_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+                            
+                            st.success(f"PDF uploaded successfully: {uploaded_file.name}")
+                            
+                            # Read file for direct passing to model
+                            with open(file_path, "rb") as file:
+                                import base64
+                                file_content = base64.b64encode(file.read()).decode('utf-8')
+                                
+                        except Exception as e:
+                            st.error(f"Error handling uploaded file: {str(e)}")
+                    
+                    # Get user query
+                    user_query = st.text_input(
+                        "Enter your question about the PDF content:"
+                    )
+                    
+                    if st.button("Generate Response") and user_query and file_content:
+                        model_name = "o3-mini"
+                        
+                        # Prepare system message
+                        system_content = (
+                            "You are an expert assistant for analyzing PDF documents. "
+                            "Use your OCR and vision capabilities to extract information from "
+                            "the provided PDF and answer questions about its content."
+                        )
+                        
+                        # Prepare messages
+                        messages = [
+                            {
+                                "role": "system",
+                                "content": system_content
+                            }
+                        ]
+                        
+                        # Add PDF content
+                        messages.append({
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Please analyze this PDF document:"
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:application/pdf;base64,{file_content}",
+                                        "detail": "high"
+                                    }
+                                }
+                            ]
+                        })
+                        
+                        # Add user query
+                        messages.append({
+                            "role": "user",
+                            "content": user_query
+                        })
+                        
+                        # Get response with proper error handling
+                        with st.spinner("Analyzing PDF and generating response..."):
+                            try:
+                                response = client.chat.completions.create(
+                                    messages=messages,
+                                    model=model_name
+                                )
+                                
+                                if response.choices and hasattr(response.choices[0].message, 'content'):
+                                    rag_reply = response.choices[0].message.content
+                                    st.markdown("### Response")
+                                    st.markdown(rag_reply)
+                                else:
+                                    st.error("No response content received from the model.")
+                                    
+                            except requests.exceptions.Timeout:
+                                st.error("The request timed out. The server might be busy or the PDF might be too large.")
+                            except requests.exceptions.ConnectionError:
+                                st.error("Connection error. Please check your internet connection and try again.")
+                            except Exception as e:
+                                st.error(f"Error generating response: {str(e)}")
+                    
+                except requests.exceptions.ConnectionError as e:
+                    st.error(f"Connection error: Could not connect to the API endpoint. Please check your internet connection.")
+                    st.error(f"Error details: {str(e)}")
+                    return
+                except Exception as e:
+                    st.error(f"API token verification failed: {str(e)}")
+                    return
+                
         except Exception as e:
-            st.error(f"Error in processing: {str(e)}")
-
+            st.error(f"Error in token verification: {str(e)}")
+    elif not token:
+        st.warning("Please enter your API token to proceed.")
+    elif not token_status:
+        st.info("Click 'Verify Token' to continue.")
+        
 def chat_assistant_page():
     st.title("Chat Assistant")
     st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
