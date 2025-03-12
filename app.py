@@ -1769,7 +1769,6 @@ def rag_assistant_page():
                         response = client.complete(
                             messages=messages,
                             model="o3-mini",
-                            max_tokens=2048
                         )
                         
                         rag_reply = response.choices[0].message.content
