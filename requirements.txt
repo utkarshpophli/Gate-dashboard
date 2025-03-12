@@ -7,3 +7,4 @@ azure-ai-inference
 sqlalchemy
 supabase
 openai
+PyPDF2

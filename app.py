@@ -1679,108 +1679,117 @@ def rag_assistant_page():
         key="rag_resource"
     )
     
-    file_content = None
-    file_path = None
+    # Track PDF processing status
+    if "pdf_processed" not in st.session_state:
+        st.session_state.pdf_processed = False
+        st.session_state.pdf_text = ""
     
-    if uploaded_file:
+    # Process PDF button
+    if uploaded_file and st.button("Process PDF"):
         try:
-            # Create uploads directory if it doesn't exist
-            upload_folder = "uploads"
-            os.makedirs(upload_folder, exist_ok=True)
-            
-            # Save uploaded file
-            file_path = os.path.join(upload_folder, uploaded_file.name)
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            st.success(f"PDF uploaded successfully: {uploaded_file.name}")
-            
-            # Just store the file path instead of base64 encoding the content
-            file_content = file_path
+            with st.spinner("Processing PDF..."):
+                # Create uploads directory if it doesn't exist
+                upload_folder = "uploads"
+                os.makedirs(upload_folder, exist_ok=True)
+                
+                # Save uploaded file
+                file_path = os.path.join(upload_folder, uploaded_file.name)
+                with open(file_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+                
+                # Extract text from PDF - more reliable than sending raw PDF
+                import PyPDF2
+                
+                pdf_text = ""
+                try:
+                    with open(file_path, "rb") as pdf_file:
+                        pdf_reader = PyPDF2.PdfReader(pdf_file)
+                        for page_num in range(len(pdf_reader.pages)):
+                            page = pdf_reader.pages[page_num]
+                            pdf_text += f"\n--- Page {page_num+1} ---\n"
+                            pdf_text += page.extract_text()
+                except Exception as e:
+                    st.error(f"Error extracting text from PDF: {str(e)}")
+                    # Fallback - just note that we have the file
+                    pdf_text = f"PDF uploaded: {uploaded_file.name}"
+                
+                # Store extracted text
+                st.session_state.pdf_processed = True
+                st.session_state.pdf_text = pdf_text
+                st.session_state.pdf_name = uploaded_file.name
+                
+                st.success(f"PDF processed successfully: {uploaded_file.name}")
                 
         except Exception as e:
-            st.error(f"Error handling uploaded file: {str(e)}")
+            st.error(f"Error processing PDF file: {str(e)}")
+    
+    # Show PDF content if processed
+    if st.session_state.pdf_processed:
+        with st.expander("View extracted PDF content"):
+            st.text(st.session_state.pdf_text[:2000] + ("..." if len(st.session_state.pdf_text) > 2000 else ""))
+            st.info(f"Showing preview of extracted text from {st.session_state.pdf_name}")
     
     # Get user query
     user_query = st.text_input(
         "Enter your question about the PDF content:"
     )
     
-    if st.button("Generate Response") and user_query and file_content:
+    if st.button("Generate Response") and user_query and st.session_state.pdf_processed:
         try:
-            # If using Azure SDK, we need to convert to a different approach
-            # Let's use the OpenAI client which has better multimodal support
-            from openai import AzureOpenAI
             
-            client = AzureOpenAI(
-                azure_endpoint="https://models.inference.ai.azure.com",
-                api_key=token,
-                api_version="2024-02-01" # Using a standard stable version
+            client = ChatCompletionsClient(
+                endpoint="https://models.inference.ai.azure.com",
+                credential=AzureKeyCredential(token),
+                api_version="2024-12-01-preview"
             )
             
-            # Read the PDF file as bytes
-            with open(file_content, "rb") as pdf_file:
-                pdf_bytes = pdf_file.read()
+            # Create a system message with context about the PDF
+            system_content = (
+                "You are an expert assistant for analyzing document content. "
+                "The user has uploaded a PDF, and the text extracted from it is provided below. "
+                "Please answer questions about this document content accurately and helpfully."
+            )
             
-            # Convert to base64
-            import base64
-            pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            # We'll send the PDF content as context and then the user's query
+            # This avoids the multimodal API issues
+            context_message = f"Here is the text extracted from the PDF document '{st.session_state.pdf_name}':\n\n{st.session_state.pdf_text}"
             
-            # Create messages with proper multimodal content
+            # Prepare messages
             messages = [
-                {
-                    "role": "system",
-                    "content": "You are an expert assistant for analyzing PDF documents. Use your OCR and vision capabilities to extract information from the provided PDF and answer questions about its content."
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Please analyze this PDF document:"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:application/pdf;base64,{pdf_base64}",
-                                "detail": "high"
-                            }
-                        }
-                    ]
-                },
-                {
-                    "role": "user",
-                    "content": user_query
-                }
+                SystemMessage(system_content),
+                UserMessage(context_message),
+                UserMessage(user_query)
             ]
             
-            # Get response with proper error handling
-            with st.spinner("Analyzing PDF and generating response..."):
-                try:
-                    # Make sure to use a vision-capable model
-                    response = client.chat.completions.create(
-                        model="o3-mini",
-                        messages=messages,
-                        max_tokens=4000  # Set a reasonable limit
-                    )
-                    
-                    if response.choices and len(response.choices) > 0:
+            # Get response with retry logic
+            with st.spinner("Analyzing document content and generating response..."):
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        response = client.complete(
+                            messages=messages,
+                            model="o3-mini",
+                            max_tokens=2048
+                        )
+                        
                         rag_reply = response.choices[0].message.content
                         st.markdown("### Response")
                         st.markdown(rag_reply)
-                    else:
-                        st.error("No response content received from the model.")
+                        break  # Success, exit retry loop
                         
-                except Exception as e:
-                    st.error(f"Error generating response: {str(e)}")
-                    import traceback
-                    st.error(traceback.format_exc())
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            st.warning(f"Attempt {attempt + 1} failed. Retrying in 2 seconds...")
+                            time.sleep(2)  # Wait before retry
+                        else:
+                            st.error(f"Error generating response after {max_retries} attempts: {str(e)}")
                     
         except Exception as e:
             st.error(f"Error in processing: {str(e)}")
-            import traceback
-            st.error(traceback.format_exc())
-            
+
+# Make sure to install PyPDF2:
+# pip install PyPDF2
+
 def chat_assistant_page():
     st.title("Chat Assistant")
     st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
