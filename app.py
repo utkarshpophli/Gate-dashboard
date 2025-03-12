@@ -1663,19 +1663,19 @@ def get_and_verify_token():
 
 def rag_assistant_page():
     st.title("RAG Assistant")
-    st.subheader("Ask for subject/topic questions and revision points – all through a prompt!")
+    st.subheader("Upload a PDF and ask questions about its content")
     
-    selected_subject = st.selectbox("Select Subject", SUBJECT_LIST)
+    # Remove subject selection
     
-    st.markdown("#### Upload Revision Resource (PDF or Image)")
+    st.markdown("#### Upload Resource (PDF)")
     uploaded_file = st.file_uploader(
-        "Upload a file", 
-        type=["pdf", "png", "jpg", "jpeg"], 
+        "Upload a PDF file", 
+        type=["pdf"], 
         key="rag_resource"
     )
     
     file_content = None
-    file_type = None
+    file_path = None
     
     if uploaded_file:
         try:
@@ -1688,10 +1688,7 @@ def rag_assistant_page():
             with open(file_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
             
-            st.success("Resource uploaded successfully!")
-            
-            # Get file type and prepare for O1 model
-            file_type = uploaded_file.name.split('.')[-1].lower()
+            st.success(f"PDF uploaded successfully: {uploaded_file.name}")
             
             # Read file for direct passing to model
             with open(file_path, "rb") as file:
@@ -1701,41 +1698,57 @@ def rag_assistant_page():
         except Exception as e:
             st.error(f"Error handling uploaded file: {str(e)}")
     
-    # Get context for RAG
-    retrieval_context = get_rag_context(selected_subject)
-    
     # Get user query
     user_query = st.text_input(
-        "Enter your query (e.g., 'Give me daily revision points for Calculus'):"
+        "Enter your question about the PDF content:"
     )
     
-    if user_query:
-        # Verify token
-        token = get_and_verify_token()
+    if st.button("Generate Response") and user_query and file_content:
+        # Get token from secrets
+        try:
+            token = st.secrets["api_keys"]["github_token"]
+        except:
+            token = st.text_input("Enter your API token:", type="password")
+            
         if not token:
-            st.error("Please provide a valid GitHub token to proceed.")
+            st.error("Please provide a valid API token to proceed.")
             return
         
         try:
             # Prepare system message
             system_content = (
-                f"You are an expert revision assistant for the GATE exam.\n"
-                f"Subject: {selected_subject}\n"
-                f"Retrieved Context:\n{retrieval_context}\n"
-                f"If I provide you with images or PDFs, use your OCR and vision capabilities to analyze them "
-                f"and incorporate that information in your response."
+                "You are an expert assistant for analyzing PDF documents. "
+                "Use your OCR and vision capabilities to extract information from "
+                "the provided PDF and answer questions about its content."
             )
             
-            # Initialize OpenAI client for O1 model
+            # Initialize OpenAI client for O1 model with proper error handling
             from openai import OpenAI
+            import requests
             
             endpoint = "https://models.inference.ai.azure.com"
             model_name = "o1"
             
-            client = OpenAI(
-                base_url=endpoint,
-                api_key=token,
-            )
+            st.info("Connecting to the O1 model...")
+            
+            # Add timeout and connection error handling
+            try:
+                client = OpenAI(
+                    base_url=endpoint,
+                    api_key=token
+                )
+                
+                # Test connection
+                client.models.list()  # This will throw an error if connection fails
+                st.success("Connection to O1 model established.")
+                
+            except requests.exceptions.ConnectionError as e:
+                st.error(f"Connection error: Could not connect to the API endpoint. Please check your internet connection and endpoint URL.")
+                st.error(f"Error details: {str(e)}")
+                return
+            except Exception as e:
+                st.error(f"API connection error: {str(e)}")
+                return
             
             # Prepare messages
             messages = [
@@ -1745,31 +1758,23 @@ def rag_assistant_page():
                 }
             ]
             
-            # Add file content if available
-            if file_content and file_type:
-                content_type = ""
-                if file_type == "pdf":
-                    content_type = "application/pdf"
-                elif file_type in ["png", "jpg", "jpeg"]:
-                    content_type = f"image/{file_type}"
-                
-                # Add file as content part
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Please analyze this document for my subject:"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{content_type};base64,{file_content}",
-                                "detail": "high"
-                            }
+            # Add PDF content
+            messages.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Please analyze this PDF document:"
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:application/pdf;base64,{file_content}",
+                            "detail": "high"
                         }
-                    ]
-                })
+                    }
+                ]
+            })
             
             # Add user query
             messages.append({
@@ -1777,22 +1782,30 @@ def rag_assistant_page():
                 "content": user_query
             })
             
-            # Get response
-            with st.spinner("Generating response..."):
-                response = client.chat.completions.create(
-                    messages=messages,
-                    model=model_name
-                )
-                
-                if response.choices and hasattr(response.choices[0].message, 'content'):
-                    rag_reply = response.choices[0].message.content
-                    st.markdown("### RAG Assistant Response")
-                    st.markdown(rag_reply)
-                else:
-                    st.error("No response content received from the model.")
+            # Get response with proper error handling
+            with st.spinner("Analyzing PDF and generating response..."):
+                try:
+                    response = client.chat.completions.create(
+                        messages=messages,
+                        model=model_name
+                    )
+                    
+                    if response.choices and hasattr(response.choices[0].message, 'content'):
+                        rag_reply = response.choices[0].message.content
+                        st.markdown("### Response")
+                        st.markdown(rag_reply)
+                    else:
+                        st.error("No response content received from the model.")
+                        
+                except requests.exceptions.Timeout:
+                    st.error("The request timed out. The server might be busy or the PDF might be too large.")
+                except requests.exceptions.ConnectionError:
+                    st.error("Connection error. Please check your internet connection and try again.")
+                except Exception as e:
+                    st.error(f"Error generating response: {str(e)}")
                     
         except Exception as e:
-            st.error(f"Error generating response: {str(e)}")
+            st.error(f"Error in processing: {str(e)}")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
