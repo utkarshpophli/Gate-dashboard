@@ -1673,7 +1673,7 @@ def rag_assistant_page():
         key="rag_resource"
     )
     
-    additional_messages = []
+    extracted_content = ""
     
     if uploaded_file:
         try:
@@ -1692,21 +1692,19 @@ def rag_assistant_page():
             ext = uploaded_file.name.split('.')[-1].lower()
             if ext in ["png", "jpg", "jpeg"]:
                 try:
-                    image_url = ImageUrl.load(
-                        image_file=file_path,
-                        image_format=ext,
-                        detail=ImageDetailLevel.LOW
-                    )
-                    additional_messages.append(ImageContentItem(image_url=image_url))
+                    # For O1 model with image support, we'll need to encode the image to base64
+                    import base64
+                    with open(file_path, "rb") as image_file:
+                        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+                    
+                    extracted_content = f"<image_content:{base64_image}>"
                 except Exception as e:
                     st.error(f"Error processing image: {str(e)}")
                     
             elif ext == "pdf":
                 extracted_text = extract_text_from_file(file_path)
                 if extracted_text:
-                    additional_messages.append(
-                        UserMessage(f"Extracted text from PDF: {extracted_text}")
-                    )
+                    extracted_content = f"Extracted text from PDF: {extracted_text}"
                 else:
                     st.warning("No text could be extracted from the PDF.")
                     
@@ -1715,14 +1713,6 @@ def rag_assistant_page():
     
     # Get context for RAG
     retrieval_context = get_rag_context(selected_subject)
-    
-    # Prepare prompt
-    prompt_text = (
-        f"You are an expert revision assistant for the GATE exam.\n"
-        f"Subject: {selected_subject}\n"
-        f"Retrieved Context:\n{retrieval_context}\n"
-        f"User Query: "
-    )
     
     # Get user query
     user_query = st.text_input(
@@ -1737,30 +1727,55 @@ def rag_assistant_page():
             return
         
         try:
+            # Prepare full prompt with context
+            system_content = (
+                f"You are an expert revision assistant for the GATE exam.\n"
+                f"Subject: {selected_subject}\n"
+                f"Retrieved Context:\n{retrieval_context}\n"
+            )
+            
+            # Initialize OpenAI client for O1 model
+            from openai import OpenAI
+            
+            endpoint = "https://models.inference.ai.azure.com"
+            model_name = "o1"
+            
+            client = OpenAI(
+                base_url=endpoint,
+                api_key=token,
+            )
+            
             # Prepare messages
             messages = [
-                SystemMessage(prompt_text),
-                UserMessage(user_query)
+                {
+                    "role": "system",
+                    "content": system_content
+                }
             ]
-            messages.extend(additional_messages)
             
-            # Create client
-            client = ChatCompletionsClient(
-                endpoint="https://models.inference.ai.azure.com",
-                credential=AzureKeyCredential(token),
-                api_version="2024-12-01-preview"
-            )
+            # Add extracted content if available
+            if extracted_content:
+                messages.append({
+                    "role": "user", 
+                    "content": extracted_content
+                })
+            
+            # Add user query
+            messages.append({
+                "role": "user",
+                "content": user_query
+            })
             
             # Get response
             with st.spinner("Generating response..."):
-                response = client.complete(
+                response = client.chat.completions.create(
                     messages=messages,
+                    model=model_name,
                     temperature=0.7,
-                    top_p=0.95,
-                    model="Llama-3.2-90B-Vision-Instruct"
+                    top_p=0.95
                 )
                 
-                if hasattr(response.choices[0].message, 'content'):
+                if response.choices and hasattr(response.choices[0].message, 'content'):
                     rag_reply = response.choices[0].message.content
                     st.markdown("### RAG Assistant Response")
                     st.markdown(rag_reply)
