@@ -9,3 +9,4 @@ supabase
 openai
 PyPDF2
 mistralai>=1.0.0
+pytesseract
