@@ -1736,12 +1736,14 @@ def rag_assistant_page():
     
     if st.button("Generate Response") and user_query and st.session_state.pdf_processed:
         try:
+            # Import Mistral client
+            from mistralai import Mistral, UserMessage, SystemMessage
             
-            client = ChatCompletionsClient(
-                endpoint="https://models.inference.ai.azure.com",
-                credential=AzureKeyCredential(token),
-                api_version="2024-12-01-preview"
-            )
+            # Initialize Mistral client with the token and endpoint
+            endpoint = "https://models.inference.ai.azure.com"
+            model_name = "Mistral-Large-2411"
+            
+            client = Mistral(api_key=token, server_url=endpoint)
             
             # Create a system message with context about the PDF
             system_content = (
@@ -1751,24 +1753,23 @@ def rag_assistant_page():
             )
             
             # We'll send the PDF content as context and then the user's query
-            # This avoids the multimodal API issues
             context_message = f"Here is the text extracted from the PDF document '{st.session_state.pdf_name}':\n\n{st.session_state.pdf_text}"
-            
-            # Prepare messages
-            messages = [
-                SystemMessage(system_content),
-                UserMessage(context_message),
-                UserMessage(user_query)
-            ]
             
             # Get response with retry logic
             with st.spinner("Analyzing document content and generating response..."):
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        response = client.complete(
-                            messages=messages,
-                            model="o3-mini",
+                        response = client.chat.complete(
+                            model=model_name,
+                            messages=[
+                                SystemMessage(content=system_content),
+                                UserMessage(content=context_message),
+                                UserMessage(content=user_query)
+                            ],
+                            temperature=0.7,
+                            max_tokens=1000,
+                            top_p=0.95
                         )
                         
                         rag_reply = response.choices[0].message.content
@@ -1785,9 +1786,6 @@ def rag_assistant_page():
                     
         except Exception as e:
             st.error(f"Error in processing: {str(e)}")
-
-# Make sure to install PyPDF2:
-# pip install PyPDF2
 
 def chat_assistant_page():
     st.title("Chat Assistant")
