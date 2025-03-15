@@ -470,6 +470,27 @@ def extract_text_from_file(file_path):
             extracted_text += f"[Error extracting image text: {e}]"
     return extracted_text
 
+def generate_notes_from_text(extracted_text):
+    """Generate structured notes from the extracted text."""
+    notes = []
+    lines = extracted_text.split('\n')
+    current_section = ""
+    current_content = []
+
+    for line in lines:
+        if line.strip().endswith(":") or line.strip().endswith("→"):
+            if current_section:
+                notes.append((current_section, current_content))
+            current_section = line.strip()
+            current_content = []
+        else:
+            current_content.append(line.strip())
+
+    if current_section:
+        notes.append((current_section, current_content))
+
+    return notes
+
 def get_rag_context(selected_subject):
     """Combine text from question bank, revision notes, and resources for a given subject."""
     context_parts = []
@@ -1183,12 +1204,12 @@ def calendar_view_page():
             else:
                 month_data['week'] = month_data['date'].dt.isocalendar().week
                 weekly_summary = month_data.groupby('week').agg({
-                    'hours': 'sum',
+                    'hours': ['sum', 'count'],
                     'subject': 'nunique',
                     'date': 'nunique'
                 }).reset_index()
 
-                weekly_summary.columns = ['Week', 'Total Hours', 'Unique Subjects', 'Days Studied']
+                weekly_summary.columns = ['Week', 'Total Hours', 'Number of Sessions', 'Unique Subjects', 'Days Studied']
 
                 st.dataframe(weekly_summary)
 
@@ -1653,3 +1674,4 @@ def main():
 if __name__ == '__main__':
     set_favicon()
     main()
+    
