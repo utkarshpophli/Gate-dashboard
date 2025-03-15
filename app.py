@@ -29,6 +29,7 @@ from PIL import Image
 import pytesseract
 import PyPDF2
 from transformers import pipeline
+import subprocess
 
 load_dotenv()
 
@@ -454,21 +455,36 @@ SUBJECT_LIST = [
 def extract_text_from_file(file_path):
     ext = file_path.split('.')[-1].lower()
     extracted_text = ""
-    if ext == "pdf" and PyPDF2:
+    if ext == "pdf":
         try:
-            with open(file_path, "rb") as f:
-                reader = PyPDF2.PdfReader(f)
-                for page in reader.pages:
-                    extracted_text += page.extract_text() + "\n"
+            # Convert PDF to images
+            images = convert_pdf_to_images(file_path)
+            extracted_text = perform_ocr_with_kraken(images)
         except Exception as e:
             extracted_text += f"[Error extracting PDF text: {e}]"
-    elif ext in ["png", "jpg", "jpeg"] and Image and pytesseract:
-        try:
-            image = Image.open(file_path)
-            extracted_text = pytesseract.image_to_string(image)
-        except Exception as e:
-            extracted_text += f"[Error extracting image text: {e}]"
     return extracted_text
+
+def convert_pdf_to_images(pdf_path):
+    """Convert each page of a PDF to an image."""
+    import fitz  # PyMuPDF
+    pdf_document = fitz.open(pdf_path)
+    images = []
+    for page_number in range(len(pdf_document)):
+        page = pdf_document.load_page(page_number)
+        pix = page.get_pixmap()
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        images.append(img)
+    return images
+
+def perform_ocr_with_kraken(images):
+    """Perform OCR on images using Kraken."""
+    kraken_path = "/path/to/kraken"  # Update with the actual path to Kraken
+    text = ""
+    for img in images:
+        img.save("/tmp/temp_image.png")
+        result = subprocess.run([kraken_path, "-i", "/tmp/temp_image.png"], capture_output=True, text=True)
+        text += result.stdout
+    return text
 
 def generate_notes_from_text(extracted_text):
     """Generate structured notes from the extracted text."""
@@ -1509,17 +1525,7 @@ def rag_assistant_page():
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                pdf_text = ""
-                try:
-                    with open(file_path, "rb") as pdf_file:
-                        pdf_reader = PyPDF2.PdfReader(pdf_file)
-                        for page_num in range(len(pdf_reader.pages)):
-                            page = pdf_reader.pages[page_num]
-                            pdf_text += f"\n--- Page {page_num+1} ---\n"
-                            pdf_text += page.extract_text()
-                except Exception as e:
-                    st.error(f"Error extracting text from PDF: {str(e)}")
-                    pdf_text = f"PDF uploaded: {uploaded_file.name}"
+                pdf_text = extract_text_from_file(file_path)
 
                 st.session_state.pdf_processed = True
                 st.session_state.pdf_text = pdf_text
@@ -1674,4 +1680,3 @@ def main():
 if __name__ == '__main__':
     set_favicon()
     main()
-    
