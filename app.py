@@ -6,6 +6,7 @@ import datetime
 import requests
 import random
 import pandas as pd
+import easyocr
 from io import BytesIO
 import plotly.express as px
 import streamlit as st
