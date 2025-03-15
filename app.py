@@ -823,12 +823,6 @@ def revision_hub_page():
         insert_resource(subject_for_resource, title, "", file_path)
         st.success("Resource uploaded and saved!")
 
-        # Extract text using EasyOCR
-        extracted_text = extract_text_from_file(file_path)
-        if extracted_text:
-            st.subheader("Extracted Text")
-            st.text(extracted_text)
-
 def question_bank_page():
     st.title("Question Bank")
     st.subheader("Store and Review Questions & Patterns by Subject")
@@ -1518,17 +1512,12 @@ def rag_assistant_page():
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                pdf_text = ""
-                try:
-                    with open(file_path, "rb") as pdf_file:
-                        pdf_reader = PyPDF2.PdfReader(pdf_file)
-                        for page_num in range(len(pdf_reader.pages)):
-                            page = pdf_reader.pages[page_num]
-                            pdf_text += f"\n--- Page {page_num+1} ---\n"
-                            pdf_text += page.extract_text()
-                except Exception as e:
-                    st.error(f"Error extracting text from PDF: {str(e)}")
-                    pdf_text = f"PDF uploaded: {uploaded_file.name}"
+                # Read the PDF content directly
+                with open(file_path, "rb") as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    pdf_text = ""
+                    for page in pdf_reader.pages:
+                        pdf_text += page.extract_text() + "\n"
 
                 st.session_state.pdf_processed = True
                 st.session_state.pdf_text = pdf_text
