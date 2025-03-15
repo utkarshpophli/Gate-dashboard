@@ -5,7 +5,6 @@ import time
 import datetime
 import requests
 import random
-import easyocr
 import pandas as pd
 from io import BytesIO
 import plotly.express as px
