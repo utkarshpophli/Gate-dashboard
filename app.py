@@ -1491,6 +1491,28 @@ def rag_assistant_page():
         st.warning("Please enter and verify your GitHub token above to proceed.")
         return
 
+    # Check if running on Streamlit Cloud
+    is_streamlit_cloud = os.environ.get('STREAMLIT_SHARING_MODE') == 'streamlit_cloud'
+    
+    # Only show Poppler instructions if not on Streamlit Cloud
+    if not is_streamlit_cloud:
+        # Display Poppler installation instructions in the sidebar
+        with st.sidebar:
+            st.markdown("### PDF Processing Requirements")
+            st.markdown("""
+            For best results, install Poppler:
+            - **Windows**: [Download Poppler](https://github.com/oschwartz10612/poppler-windows/releases/)
+              - Extract to a folder (e.g., `C:\\poppler`)
+              - Add to PATH or specify path below
+            - **macOS**: `brew install poppler`
+            - **Linux**: `apt-get install poppler-utils`
+            """)
+            poppler_path = st.text_input("Poppler Path (Windows only, leave empty if in PATH):", 
+                                        placeholder="e.g., C:\\poppler\\bin")
+    else:
+        # Default empty value for Streamlit Cloud
+        poppler_path = ""
+
     st.markdown("#### Upload Resource (PDF)")
     uploaded_file = st.file_uploader(
         "Upload a PDF file",
@@ -1517,38 +1539,51 @@ def rag_assistant_page():
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Try using pdf2image with Poppler
-                try:
-                    from pdf2image import convert_from_path
+                # Skip pdf2image on Streamlit Cloud to avoid Poppler dependency issues
+                if not is_streamlit_cloud:
+                    # Try using pdf2image with Poppler
+                    try:
+                        from pdf2image import convert_from_path
+                        
+                        # Prepare conversion parameters
+                        conversion_args = {"dpi": 200}
+                        
+                        # Add poppler path if provided (for Windows)
+                        if poppler_path and os.path.exists(poppler_path):
+                            conversion_args["poppler_path"] = poppler_path
+                        
+                        # Convert PDF pages to images
+                        images = convert_from_path(file_path, **conversion_args)
+                        
+                        # Save images and store their paths
+                        image_paths = []
+                        for i, image in enumerate(images):
+                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
+                            image.save(image_path, "JPEG")
+                            image_paths.append(image_path)
+                        
+                        st.session_state.pdf_processed = True
+                        st.session_state.pdf_images = image_paths
+                        st.session_state.pdf_name = uploaded_file.name
+                        st.session_state.current_page = 0
+                        
+                        st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
+                        
+                        # If successful, skip the fallback method
+                        fallback_needed = False
                     
-                    # Prepare conversion parameters
-                    conversion_args = {"dpi": 200}
-                    
-                    # Add poppler path if provided (for Windows)
-                    if poppler_path and os.path.exists(poppler_path):
-                        conversion_args["poppler_path"] = poppler_path
-                    
-                    # Convert PDF pages to images
-                    images = convert_from_path(file_path, **conversion_args)
-                    
-                    # Save images and store their paths
-                    image_paths = []
-                    for i, image in enumerate(images):
-                        image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
-                        image.save(image_path, "JPEG")
-                        image_paths.append(image_path)
-                    
-                    st.session_state.pdf_processed = True
-                    st.session_state.pdf_images = image_paths
-                    st.session_state.pdf_name = uploaded_file.name
-                    st.session_state.current_page = 0
-                    
-                    st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
+                    except Exception as pdf2image_error:
+                        st.warning(f"Could not use pdf2image: {str(pdf2image_error)}")
+                        st.info("Trying fallback method with PyPDF2 and PIL...")
+                        fallback_needed = True
+                else:
+                    # On Streamlit Cloud, always use the fallback method
+                    fallback_needed = True
+                    if is_streamlit_cloud:
+                        st.info("Using text-based PDF processing on Streamlit Cloud...")
                 
-                except Exception as pdf2image_error:
-                    st.warning(f"Could not use pdf2image: {str(pdf2image_error)}")
-                    st.info("Trying fallback method with PyPDF2 and PIL...")
-                    
+                # Use fallback method if needed or on Streamlit Cloud
+                if fallback_needed:
                     # Fallback: Use PyPDF2 and PIL to render PDF pages
                     try:
                         import PyPDF2
@@ -1626,13 +1661,17 @@ def rag_assistant_page():
                             st.session_state.pdf_name = uploaded_file.name
                             st.session_state.current_page = 0
                             st.success(f"PDF processed using fallback method: {uploaded_file.name} ({len(image_paths)} pages)")
-                            st.warning("Note: The fallback method provides limited visual quality. For best results, install Poppler.")
+                            if not is_streamlit_cloud:
+                                st.warning("Note: The fallback method provides limited visual quality. For best results, install Poppler.")
                         else:
                             raise Exception("No images were generated")
                             
                     except Exception as fallback_error:
                         st.error(f"All PDF processing methods failed: {str(fallback_error)}")
-                        st.error("Please install Poppler and try again. See sidebar for installation instructions.")
+                        if not is_streamlit_cloud:
+                            st.error("Please install Poppler and try again. See sidebar for installation instructions.")
+                        else:
+                            st.error("PDF processing failed. Please try a different PDF file.")
                         return
 
         except Exception as e:
@@ -1657,7 +1696,7 @@ def rag_assistant_page():
         
         # Display the current page image
         current_image_path = st.session_state.pdf_images[st.session_state.current_page]
-        st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_column_width=True)
+        st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
 
     user_query = st.text_input(
         "Enter your question about the PDF content:"
