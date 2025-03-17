@@ -23,16 +23,24 @@ pip install -r requirements.txt
 
 ### PDF Processing in the RAG Assistant
 
-The RAG Assistant uses a text-based approach to process PDFs:
+The RAG Assistant now supports two AI models for analyzing PDF content:
 
-1. **Text Extraction**: PyPDF2 extracts text from each page of the PDF
-2. **Image Rendering**: The extracted text is rendered onto images using PIL
-3. **Vision Analysis**: The rendered images are analyzed by a vision-based AI model (GPT-4o)
+#### Llama-3.2-90B-Vision-Instruct (Recommended for Scanned PDFs)
+- Powerful OCR capabilities built into the model
+- Better at handling scanned documents and handwritten text
+- Can understand complex layouts and visual elements
 
-This approach works well for text-based PDFs but has some limitations:
-- Original formatting and layout are simplified
-- Images from the original PDF are not preserved
-- Complex elements like tables may not be rendered accurately
+#### GPT-4o (Alternative Option)
+- Good for text-based PDFs and general visual analysis
+- Works well with digital PDFs that have selectable text
+
+The application attempts to process PDFs in two ways:
+1. **High-Quality Image Conversion**: Using pdf2image to create high-resolution images (300 DPI)
+2. **Fallback Text Rendering**: If pdf2image is unavailable, text is extracted and rendered onto images
+
+For best results with scanned documents:
+- Select the Llama-3.2-90B-Vision-Instruct model
+- The higher resolution images (300 DPI) improve OCR accuracy
 
 ## Usage
 

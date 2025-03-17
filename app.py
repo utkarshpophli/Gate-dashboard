@@ -1498,6 +1498,19 @@ def rag_assistant_page():
         key="rag_resource"
     )
 
+    # Add model selection
+    model_options = {
+        "Llama-3.2-90B-Vision-Instruct": "Best for scanned documents with OCR capabilities",
+        "gpt-4o": "Good for text-based PDFs and general visual analysis"
+    }
+    
+    selected_model = st.selectbox(
+        "Select AI Model",
+        options=list(model_options.keys()),
+        format_func=lambda x: f"{x} ({model_options[x]})",
+        index=0  # Default to Llama model
+    )
+
     if "pdf_processed" not in st.session_state:
         st.session_state.pdf_processed = False
         st.session_state.pdf_images = []
@@ -1517,79 +1530,96 @@ def rag_assistant_page():
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Use text-based PDF processing for Streamlit Cloud
-                st.info("Processing PDF text content...")
-                
-                # Process PDF using PyPDF2 and PIL
+                # Process PDF directly to images (better for scanned documents)
                 try:
                     import PyPDF2
                     from PIL import Image, ImageDraw, ImageFont
                     from io import BytesIO
                     
+                    # For scanned PDFs, we'll use a higher resolution
+                    dpi = 300
                     image_paths = []
                     
-                    # Simple text-based processing using PyPDF2 and PIL
-                    with open(file_path, "rb") as pdf_file:
-                        pdf_reader = PyPDF2.PdfReader(pdf_file)
-                        for i, page in enumerate(pdf_reader.pages):
-                            # Create a blank image with text
-                            img = Image.new('RGB', (800, 1100), color='white')
-                            d = ImageDraw.Draw(img)
-                            
-                            # Try to get a font, use default if not available
-                            try:
-                                font = ImageFont.truetype("arial.ttf", 12)
-                            except IOError:
-                                font = ImageFont.load_default()
-                            
-                            # Extract text and add to image
-                            text = page.extract_text()
-                            
-                            # Split text into lines and draw with proper wrapping
-                            y_position = 20
-                            x_position = 20
-                            max_width = 760
-                            
-                            # Add page number at the top
-                            d.text((x_position, y_position), f"Page {i+1}", fill=(0, 0, 0), font=font)
-                            y_position += 30
-                            
-                            # Process text in chunks to avoid overwhelming the image
-                            words = text.split()
-                            line = ""
-                            for word in words:
-                                test_line = line + " " + word if line else word
-                                # Check if adding this word would make the line too long
-                                if d.textlength(test_line, font=font) <= max_width:
-                                    line = test_line
-                                else:
-                                    # Draw the current line and start a new one
-                                    d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
-                                    y_position += 20
-                                    line = word
-                                    
-                                    # If we've reached the bottom of the page, create a new page
-                                    if y_position > 1050:
-                                        # Save current image
-                                        image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
-                                        img.save(image_path)
-                                        image_paths.append(image_path)
-                                        
-                                        # Create a new image for continuation
-                                        img = Image.new('RGB', (800, 1100), color='white')
-                                        d = ImageDraw.Draw(img)
-                                        y_position = 20
-                                        d.text((x_position, y_position), f"Page {i+1} (continued)", fill=(0, 0, 0), font=font)
-                                        y_position += 30
-                            
-                            # Draw the last line
-                            if line:
-                                d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
-                            
-                            # Save the image
-                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
-                            img.save(image_path)
+                    # Try to use pdf2image if available (better quality for scanned docs)
+                    try:
+                        from pdf2image import convert_from_path
+                        
+                        st.info("Converting PDF pages to high-quality images...")
+                        
+                        # Convert PDF pages to images at higher DPI for better OCR
+                        images = convert_from_path(file_path, dpi=dpi)
+                        
+                        # Save images and store their paths
+                        for i, image in enumerate(images):
+                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
+                            image.save(image_path, "JPEG", quality=95)  # Higher quality for OCR
                             image_paths.append(image_path)
+                            
+                    except Exception as pdf2image_error:
+                        # Fallback to PyPDF2 + PIL if pdf2image fails
+                        st.info("Using alternative method to process PDF...")
+                        
+                        with open(file_path, "rb") as pdf_file:
+                            pdf_reader = PyPDF2.PdfReader(pdf_file)
+                            for i, page in enumerate(pdf_reader.pages):
+                                # Create a blank image with text
+                                img = Image.new('RGB', (1700, 2200), color='white')  # Larger size for better quality
+                                d = ImageDraw.Draw(img)
+                                
+                                # Try to get a font, use default if not available
+                                try:
+                                    font = ImageFont.truetype("arial.ttf", 24)  # Larger font
+                                except IOError:
+                                    font = ImageFont.load_default()
+                                
+                                # Extract text and add to image
+                                text = page.extract_text()
+                                
+                                # Split text into lines and draw with proper wrapping
+                                y_position = 40
+                                x_position = 40
+                                max_width = 1620
+                                
+                                # Add page number at the top
+                                d.text((x_position, y_position), f"Page {i+1}", fill=(0, 0, 0), font=font)
+                                y_position += 60
+                                
+                                # Process text in chunks to avoid overwhelming the image
+                                words = text.split()
+                                line = ""
+                                for word in words:
+                                    test_line = line + " " + word if line else word
+                                    # Check if adding this word would make the line too long
+                                    if d.textlength(test_line, font=font) <= max_width:
+                                        line = test_line
+                                    else:
+                                        # Draw the current line and start a new one
+                                        d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
+                                        y_position += 40
+                                        line = word
+                                        
+                                        # If we've reached the bottom of the page, create a new page
+                                        if y_position > 2100:
+                                            # Save current image
+                                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
+                                            img.save(image_path, quality=95)
+                                            image_paths.append(image_path)
+                                            
+                                            # Create a new image for continuation
+                                            img = Image.new('RGB', (1700, 2200), color='white')
+                                            d = ImageDraw.Draw(img)
+                                            y_position = 40
+                                            d.text((x_position, y_position), f"Page {i+1} (continued)", fill=(0, 0, 0), font=font)
+                                            y_position += 60
+                                
+                                # Draw the last line
+                                if line:
+                                    d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
+                                
+                                # Save the image
+                                image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
+                                img.save(image_path, quality=95)
+                                image_paths.append(image_path)
                     
                     if image_paths:
                         st.session_state.pdf_processed = True
@@ -1650,13 +1680,22 @@ def rag_assistant_page():
                 import base64
                 image_data = base64.b64encode(img_file.read()).decode('utf-8')
             
-            # Create system message
-            system_message = SystemMessage(
-                "You are an expert assistant for analyzing document content from images. "
-                "The user has uploaded a PDF that has been converted to images with text content. "
-                "Please analyze the image content and answer questions about it accurately and helpfully. "
-                "The PDF has been processed to extract text only, so focus on the textual content."
-            )
+            # Create system message based on selected model
+            if selected_model == "Llama-3.2-90B-Vision-Instruct":
+                system_message = SystemMessage(
+                    "You are an expert assistant for analyzing document content from images. "
+                    "The user has uploaded a scanned PDF that has been converted to images. "
+                    "Use your OCR capabilities to read and understand the text in the image. "
+                    "Pay attention to both text and visual elements in the document. "
+                    "Be precise and thorough in your analysis."
+                )
+            else:  # GPT-4o
+                system_message = SystemMessage(
+                    "You are an expert assistant for analyzing document content from images. "
+                    "The user has uploaded a PDF that has been converted to images with text content. "
+                    "Please analyze the image content and answer questions about it accurately and helpfully. "
+                    "The PDF has been processed to extract text only, so focus on the textual content."
+                )
             
             # Create user message with image
             user_message_with_image = UserMessage(
@@ -1674,14 +1713,16 @@ def rag_assistant_page():
             # Create user question message
             question_message = UserMessage(content=user_query)
 
-            with st.spinner("Analyzing document content and generating response..."):
+            with st.spinner(f"Analyzing document content with {selected_model}..."):
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        # Use GPT-4 Vision model
+                        # Use the selected model
                         response = client.complete(
                             messages=[system_message, user_message_with_image, question_message],
-                            model="gpt-4o"
+                            model=selected_model,
+                            temperature=0.7,
+                            max_tokens=1000
                         )
 
                         rag_reply = response.choices[0].message.content
