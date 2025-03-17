@@ -13,4 +13,3 @@ pytesseract
 Pillow
 transformers
 easyocr
-pdf2image>=1.16.3

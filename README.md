@@ -21,28 +21,18 @@ This repository contains a Python application for GATE Data Analytics (DA) prepa
 pip install -r requirements.txt
 ```
 
-### Additional Requirements for Vision-based RAG Assistant
+### PDF Processing in the RAG Assistant
 
-The RAG Assistant uses two methods to process PDFs:
+The RAG Assistant uses a text-based approach to process PDFs:
 
-#### Primary Method (Best Quality)
-- **pdf2image**: For converting PDFs to images
-- **Poppler**: A dependency for pdf2image
-  - On Windows: 
-    - Download from [poppler-windows releases](https://github.com/oschwartz10612/poppler-windows/releases/)
-    - Extract to a folder (e.g., `C:\poppler`)
-    - Add the bin directory to your system PATH or specify the path in the application
+1. **Text Extraction**: PyPDF2 extracts text from each page of the PDF
+2. **Image Rendering**: The extracted text is rendered onto images using PIL
+3. **Vision Analysis**: The rendered images are analyzed by a vision-based AI model (GPT-4o)
 
-  - On macOS: `brew install poppler`
-  - On Linux: `apt-get install poppler-utils`
-
-#### Fallback Method (If Poppler is unavailable)
-If Poppler is not available, the application will use a basic fallback method:
-
-- **PyPDF2 + PIL**: Extracts text from PDF and renders it to images
-  - This method has limited visual quality but works without external dependencies
-  - Text formatting and layout will be simplified
-  - Images and complex formatting in the PDF will not be preserved
+This approach works well for text-based PDFs but has some limitations:
+- Original formatting and layout are simplified
+- Images from the original PDF are not preserved
+- Complex elements like tables may not be rendered accurately
 
 ## Usage
 
