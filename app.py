@@ -1491,20 +1491,6 @@ def rag_assistant_page():
         st.warning("Please enter and verify your GitHub token above to proceed.")
         return
 
-    # Display Poppler installation instructions in the sidebar
-    with st.sidebar:
-        st.markdown("### PDF Processing Requirements")
-        st.markdown("""
-        For best results, install Poppler:
-        - **Windows**: [Download Poppler](https://github.com/oschwartz10612/poppler-windows/releases/)
-          - Extract to a folder (e.g., `C:\\poppler`)
-          - Add to PATH or specify path below
-        - **macOS**: `brew install poppler`
-        - **Linux**: `apt-get install poppler-utils`
-        """)
-        poppler_path = st.text_input("Poppler Path (Windows only, leave empty if in PATH):", 
-                                    placeholder="e.g., C:\\poppler\\bin")
-
     st.markdown("#### Upload Resource (PDF)")
     uploaded_file = st.file_uploader(
         "Upload a PDF file",
