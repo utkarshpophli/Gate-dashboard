@@ -1484,7 +1484,7 @@ def get_and_verify_token():
 
 def rag_assistant_page():
     st.title("RAG Assistant")
-    st.subheader("Upload a PDF and ask questions about its content")
+    st.subheader("Upload a PDF and ask questions about its visual content")
 
     token = get_and_verify_token()
     if not token:
@@ -1500,74 +1500,125 @@ def rag_assistant_page():
 
     if "pdf_processed" not in st.session_state:
         st.session_state.pdf_processed = False
-        st.session_state.pdf_text = ""
+        st.session_state.pdf_images = []
+        st.session_state.pdf_name = ""
+        st.session_state.current_page = 0
 
     if uploaded_file and st.button("Process PDF"):
         try:
-            with st.spinner("Processing PDF..."):
+            with st.spinner("Converting PDF to images..."):
                 upload_folder = "uploads"
+                images_folder = os.path.join(upload_folder, "images")
                 os.makedirs(upload_folder, exist_ok=True)
+                os.makedirs(images_folder, exist_ok=True)
 
+                # Save the PDF file
                 file_path = os.path.join(upload_folder, uploaded_file.name)
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Read the PDF content directly
-                with open(file_path, "rb") as pdf_file:
-                    pdf_reader = PyPDF2.PdfReader(pdf_file)
-                    pdf_text = ""
-                    for page in pdf_reader.pages:
-                        pdf_text += page.extract_text() + "\n"
-
-                st.session_state.pdf_processed = True
-                st.session_state.pdf_text = pdf_text
-                st.session_state.pdf_name = uploaded_file.name
-
-                st.success(f"PDF processed successfully: {uploaded_file.name}")
+                # Convert PDF to images using pdf2image
+                try:
+                    from pdf2image import convert_from_path
+                    
+                    # Convert PDF pages to images
+                    images = convert_from_path(file_path, dpi=200)
+                    
+                    # Save images and store their paths
+                    image_paths = []
+                    for i, image in enumerate(images):
+                        image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
+                        image.save(image_path, "JPEG")
+                        image_paths.append(image_path)
+                    
+                    st.session_state.pdf_processed = True
+                    st.session_state.pdf_images = image_paths
+                    st.session_state.pdf_name = uploaded_file.name
+                    st.session_state.current_page = 0
+                    
+                    st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
+                
+                except ImportError:
+                    st.error("pdf2image library is required. Please install it with 'pip install pdf2image'")
+                    st.info("You may also need to install poppler. On Windows, you can download it from https://github.com/oschwartz10612/poppler-windows/releases/")
+                    return
 
         except Exception as e:
             st.error(f"Error processing PDF file: {str(e)}")
 
-    if st.session_state.pdf_processed:
-        with st.expander("View extracted PDF content"):
-            st.text(st.session_state.pdf_text[:2000] + ("..." if len(st.session_state.pdf_text) > 2000 else ""))
-            st.info(f"Showing preview of extracted text from {st.session_state.pdf_name}")
+    if st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
+        # Display page navigation
+        col1, col2, col3 = st.columns([1, 3, 1])
+        with col1:
+            if st.button("Previous Page", disabled=st.session_state.current_page <= 0):
+                st.session_state.current_page = max(0, st.session_state.current_page - 1)
+                st.rerun()
+        
+        with col2:
+            st.write(f"Page {st.session_state.current_page + 1} of {len(st.session_state.pdf_images)}")
+        
+        with col3:
+            if st.button("Next Page", disabled=st.session_state.current_page >= len(st.session_state.pdf_images) - 1):
+                st.session_state.current_page = min(len(st.session_state.pdf_images) - 1, st.session_state.current_page + 1)
+                st.rerun()
+        
+        # Display the current page image
+        current_image_path = st.session_state.pdf_images[st.session_state.current_page]
+        st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_column_width=True)
 
     user_query = st.text_input(
         "Enter your question about the PDF content:"
     )
 
-    if st.button("Generate Response") and user_query and st.session_state.pdf_processed:
+    if st.button("Generate Response") and user_query and st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
         try:
-            from mistralai import Mistral, UserMessage, SystemMessage
-
-            endpoint = "https://models.inference.ai.azure.com"
-            model_name = "Mistral-Large-2411"
-
-            client = Mistral(api_key=token, server_url=endpoint)
-
-            system_content = (
-                "You are an expert assistant for analyzing document content. "
-                "The user has uploaded a PDF, and the text extracted from it is provided below. "
-                "Please answer questions about this document content accurately and helpfully."
+            # Use Azure AI vision model
+            client = ChatCompletionsClient(
+                endpoint="https://models.inference.ai.azure.com",
+                credential=AzureKeyCredential(token),
+                api_version="2024-12-01-preview"
             )
 
-            context_message = f"Here is the text extracted from the PDF document '{st.session_state.pdf_name}':\n\n{st.session_state.pdf_text}"
+            # Get the current image
+            current_image_path = st.session_state.pdf_images[st.session_state.current_page]
+            
+            # Read the image as base64
+            with open(current_image_path, "rb") as img_file:
+                import base64
+                image_data = base64.b64encode(img_file.read()).decode('utf-8')
+            
+            # Create system message
+            system_message = SystemMessage(
+                "You are an expert assistant for analyzing document content from images. "
+                "The user has uploaded a PDF that has been converted to images. "
+                "Please analyze the image content and answer questions about it accurately and helpfully. "
+                "Pay attention to both text and visual elements in the document."
+            )
+            
+            # Create user message with image
+            user_message_with_image = UserMessage(
+                content=[
+                    TextContentItem("Here is a page from the document. Please analyze it and answer my question."),
+                    ImageContentItem(
+                        image_url=ImageUrl(
+                            url=f"data:image/jpeg;base64,{image_data}",
+                            detail=ImageDetailLevel.HIGH
+                        )
+                    )
+                ]
+            )
+            
+            # Create user question message
+            question_message = UserMessage(content=user_query)
 
             with st.spinner("Analyzing document content and generating response..."):
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        response = client.chat.complete(
-                            model=model_name,
-                            messages=[
-                                SystemMessage(content=system_content),
-                                UserMessage(content=context_message),
-                                UserMessage(content=user_query)
-                            ],
-                            temperature=0.7,
-                            max_tokens=1000,
-                            top_p=0.95
+                        # Use GPT-4 Vision model
+                        response = client.complete(
+                            messages=[system_message, user_message_with_image, question_message],
+                            model="gpt-4o"
                         )
 
                         rag_reply = response.choices[0].message.content
@@ -1584,6 +1635,7 @@ def rag_assistant_page():
 
         except Exception as e:
             st.error(f"Error in processing: {str(e)}")
+            st.exception(e)
 
 def chat_assistant_page():
     st.title("Chat Assistant")

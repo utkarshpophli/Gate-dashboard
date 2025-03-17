@@ -11,6 +11,7 @@ This repository contains a Python application for GATE Data Analytics (DA) prepa
 - **Progress Tracking**: Monitor your performance and study progress
 - **Mock Tests**: Take timed tests simulating exam conditions
 - **Score Analysis**: Get detailed feedback on your test performance
+- **Vision-based RAG Assistant**: Upload PDFs and ask questions about their visual content using AI vision models
 
 ## Installation
 
@@ -19,6 +20,15 @@ This repository contains a Python application for GATE Data Analytics (DA) prepa
 ```bash
 pip install -r requirements.txt
 ```
+
+### Additional Requirements for Vision-based RAG Assistant
+
+The RAG Assistant requires:
+- **pdf2image**: For converting PDFs to images
+- **Poppler**: A dependency for pdf2image
+  - On Windows: Download from [poppler-windows releases](https://github.com/oschwartz10612/poppler-windows/releases/)
+  - On macOS: `brew install poppler`
+  - On Linux: `apt-get install poppler-utils`
 
 ## Usage
 
@@ -33,6 +43,8 @@ python app.py
 ├── README.md
 ├── app.py
 ├── requirements.txt
+├── uploads/
+│   └── images/  # Stores PDF page images for the RAG Assistant
 ```
 
 ## Contributing
