@@ -1491,6 +1491,20 @@ def rag_assistant_page():
         st.warning("Please enter and verify your GitHub token above to proceed.")
         return
 
+    # Display Poppler installation instructions in the sidebar
+    with st.sidebar:
+        st.markdown("### PDF Processing Requirements")
+        st.markdown("""
+        For best results, install Poppler:
+        - **Windows**: [Download Poppler](https://github.com/oschwartz10612/poppler-windows/releases/)
+          - Extract to a folder (e.g., `C:\\poppler`)
+          - Add to PATH or specify path below
+        - **macOS**: `brew install poppler`
+        - **Linux**: `apt-get install poppler-utils`
+        """)
+        poppler_path = st.text_input("Poppler Path (Windows only, leave empty if in PATH):", 
+                                    placeholder="e.g., C:\\poppler\\bin")
+
     st.markdown("#### Upload Resource (PDF)")
     uploaded_file = st.file_uploader(
         "Upload a PDF file",
@@ -1517,12 +1531,19 @@ def rag_assistant_page():
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Convert PDF to images using pdf2image
+                # Try using pdf2image with Poppler
                 try:
                     from pdf2image import convert_from_path
                     
+                    # Prepare conversion parameters
+                    conversion_args = {"dpi": 200}
+                    
+                    # Add poppler path if provided (for Windows)
+                    if poppler_path and os.path.exists(poppler_path):
+                        conversion_args["poppler_path"] = poppler_path
+                    
                     # Convert PDF pages to images
-                    images = convert_from_path(file_path, dpi=200)
+                    images = convert_from_path(file_path, **conversion_args)
                     
                     # Save images and store their paths
                     image_paths = []
@@ -1538,13 +1559,99 @@ def rag_assistant_page():
                     
                     st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
                 
-                except ImportError:
-                    st.error("pdf2image library is required. Please install it with 'pip install pdf2image'")
-                    st.info("You may also need to install poppler. On Windows, you can download it from https://github.com/oschwartz10612/poppler-windows/releases/")
-                    return
+                except Exception as pdf2image_error:
+                    st.warning(f"Could not use pdf2image: {str(pdf2image_error)}")
+                    st.info("Trying fallback method with PyPDF2 and PIL...")
+                    
+                    # Fallback: Use PyPDF2 and PIL to render PDF pages
+                    try:
+                        import PyPDF2
+                        from PIL import Image, ImageDraw, ImageFont
+                        from io import BytesIO
+                        
+                        image_paths = []
+                        
+                        # Simple fallback using PyPDF2 and PIL
+                        with open(file_path, "rb") as pdf_file:
+                            pdf_reader = PyPDF2.PdfReader(pdf_file)
+                            for i, page in enumerate(pdf_reader.pages):
+                                # Create a blank image with text
+                                img = Image.new('RGB', (800, 1100), color='white')
+                                d = ImageDraw.Draw(img)
+                                
+                                # Try to get a font, use default if not available
+                                try:
+                                    font = ImageFont.truetype("arial.ttf", 12)
+                                except IOError:
+                                    font = ImageFont.load_default()
+                                
+                                # Extract text and add to image
+                                text = page.extract_text()
+                                
+                                # Split text into lines and draw with proper wrapping
+                                y_position = 20
+                                x_position = 20
+                                max_width = 760
+                                
+                                # Add page number at the top
+                                d.text((x_position, y_position), f"Page {i+1}", fill=(0, 0, 0), font=font)
+                                y_position += 30
+                                
+                                # Process text in chunks to avoid overwhelming the image
+                                words = text.split()
+                                line = ""
+                                for word in words:
+                                    test_line = line + " " + word if line else word
+                                    # Check if adding this word would make the line too long
+                                    if d.textlength(test_line, font=font) <= max_width:
+                                        line = test_line
+                                    else:
+                                        # Draw the current line and start a new one
+                                        d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
+                                        y_position += 20
+                                        line = word
+                                        
+                                        # If we've reached the bottom of the page, create a new page
+                                        if y_position > 1050:
+                                            # Save current image
+                                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
+                                            img.save(image_path)
+                                            image_paths.append(image_path)
+                                            
+                                            # Create a new image for continuation
+                                            img = Image.new('RGB', (800, 1100), color='white')
+                                            d = ImageDraw.Draw(img)
+                                            y_position = 20
+                                            d.text((x_position, y_position), f"Page {i+1} (continued)", fill=(0, 0, 0), font=font)
+                                            y_position += 30
+                                
+                                # Draw the last line
+                                if line:
+                                    d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
+                                
+                                # Save the image
+                                image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
+                                img.save(image_path)
+                                image_paths.append(image_path)
+                        
+                        if image_paths:
+                            st.session_state.pdf_processed = True
+                            st.session_state.pdf_images = image_paths
+                            st.session_state.pdf_name = uploaded_file.name
+                            st.session_state.current_page = 0
+                            st.success(f"PDF processed using fallback method: {uploaded_file.name} ({len(image_paths)} pages)")
+                            st.warning("Note: The fallback method provides limited visual quality. For best results, install Poppler.")
+                        else:
+                            raise Exception("No images were generated")
+                            
+                    except Exception as fallback_error:
+                        st.error(f"All PDF processing methods failed: {str(fallback_error)}")
+                        st.error("Please install Poppler and try again. See sidebar for installation instructions.")
+                        return
 
         except Exception as e:
             st.error(f"Error processing PDF file: {str(e)}")
+            st.exception(e)
 
     if st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
         # Display page navigation
