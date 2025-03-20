@@ -30,30 +30,27 @@ from PIL import Image
 import pytesseract
 import PyPDF2
 from transformers import pipeline
-from langchain.chains import LLMChain, SequentialChain
-from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory
-from langchain.prompts import PromptTemplate
-from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
-from langchain.agents.format_scratchpad import format_log_to_str
-from langchain.agents.output_parsers import ReActSingleInputOutputParser
-from langchain.tools import Tool
-from langchain.utilities import PythonREPL
-from langchain.document_loaders import PyPDFLoader, TextLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.chains.question_answering import load_qa_chain
-from langchain.chains import RetrievalQA
-from langchain.callbacks import get_openai_callback
-from langchain.llms import AzureOpenAI
-from langchain.chains import ConversationChain
-from langchain.chains.conversation.memory import ConversationBufferWindowMemory
+from langchain.chains import LLMChain, SequentialChain, ConversationChain, RetrievalQA
+from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory, ConversationBufferWindowMemory
 from langchain.prompts import (
+    PromptTemplate,
     ChatPromptTemplate,
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate
 )
+from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
+from langchain.agents.format_scratchpad import format_log_to_str
+from langchain.agents.output_parsers import ReActSingleInputOutputParser
+from langchain_community.tools import Tool
+from langchain_community.utilities import PythonREPL
+from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import OpenAIEmbeddings
+from langchain.chains.question_answering import load_qa_chain
+from langchain.callbacks import get_openai_callback
+from langchain_community.llms import AzureOpenAI
 
 
 load_dotenv()
