@@ -1670,12 +1670,12 @@ def rag_assistant_page():
         current_image_path = st.session_state.pdf_images[st.session_state.current_page]
         with st.expander("View Current Page", expanded=True):
             st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
-            
-            # Display extracted text for the current page
-            if st.session_state.extracted_text and len(st.session_state.extracted_text) > st.session_state.current_page:
-                page_text = st.session_state.extracted_text[st.session_state.current_page]["text"]
-                with st.expander("View Extracted Text", expanded=False):
-                    st.text(page_text)
+        
+        # Display extracted text for the current page as a separate expander
+        if st.session_state.extracted_text and len(st.session_state.extracted_text) > st.session_state.current_page:
+            page_text = st.session_state.extracted_text[st.session_state.current_page]["text"]
+            with st.expander("View Extracted Text", expanded=False):
+                st.text(page_text)
 
     # Ask a question section
     st.markdown("### Ask a question about the content")
