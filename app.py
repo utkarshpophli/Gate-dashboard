@@ -1547,13 +1547,16 @@ def create_rag_chain():
         HumanMessagePromptTemplate.from_template("{input}")
     ])
     
-    # Create the chain
+    # Create the chain with Azure OpenAI
     chain = ConversationChain(
         llm=AzureOpenAI(
-            deployment_name="gpt-4",
-            model_name="gpt-4",
+            deployment_name="o3-mini",
+            model_name="o3-mini",
             temperature=0.7,
-            max_tokens=1000
+            max_tokens=1000,
+            api_key=st.session_state.token,
+            azure_endpoint="https://models.inference.ai.azure.com",
+            api_version="2024-12-01-preview"
         ),
         memory=memory,
         prompt=prompt,
@@ -1567,9 +1570,13 @@ def create_chat_chain():
     # Initialize memory with summary
     memory = ConversationSummaryMemory(
         llm=AzureOpenAI(
-            deployment_name="gpt-4",
-            model_name="gpt-4",
-            temperature=0.7
+            deployment_name="o3-mini",
+            model_name="o3-mini",
+            temperature=0.7,
+            max_tokens=1000,
+            api_key=st.session_state.token,
+            azure_endpoint="https://models.inference.ai.azure.com",
+            api_version="2024-12-01-preview"
         ),
         memory_key="chat_history",
         return_messages=True
@@ -1608,13 +1615,16 @@ def create_chat_chain():
         HumanMessagePromptTemplate.from_template("{input}")
     ])
     
-    # Create the chain
+    # Create the chain with Azure OpenAI
     chain = ConversationChain(
         llm=AzureOpenAI(
-            deployment_name="gpt-4",
-            model_name="gpt-4",
+            deployment_name="o3-mini",
+            model_name="o3-mini",
             temperature=0.7,
-            max_tokens=1000
+            max_tokens=1000,
+            api_key=st.session_state.token,
+            azure_endpoint="https://models.inference.ai.azure.com",
+            api_version="2024-12-01-preview"
         ),
         memory=memory,
         prompt=prompt,
