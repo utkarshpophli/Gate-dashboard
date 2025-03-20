@@ -1683,18 +1683,17 @@ def rag_assistant_page():
             # Create system message based on selected model
             if selected_model == "Llama-3.2-90B-Vision-Instruct":
                 system_message = SystemMessage(
-                    "You are an expert assistant for analyzing document content from images. "
-                    "The user has uploaded a scanned PDF that has been converted to images. "
-                    "Use your OCR capabilities to read and understand the text in the image. "
-                    "Pay attention to both text and visual elements in the document. "
-                    "Be precise and thorough in your analysis."
+"""Analyze the text in the provided image. Extract all readable content
+                                        and present it in a structured Markdown format that is clear, concise, 
+                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
+                                        code blocks) as necessary to represent the content effectively."""
                 )
             else:  # GPT-4o
                 system_message = SystemMessage(
-                    "You are an expert assistant for analyzing document content from images. "
-                    "The user has uploaded a PDF that has been converted to images with text content. "
-                    "Please analyze the image content and answer questions about it accurately and helpfully. "
-                    "The PDF has been processed to extract text only, so focus on the textual content."
+                   """Analyze the text in the provided image. Extract all readable content
+                                        and present it in a structured Markdown format that is clear, concise, 
+                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
+                                        code blocks) as necessary to represent the content effectively."""
                 )
             
             # Create user message with image
@@ -1776,10 +1775,7 @@ def chat_assistant_page():
             )
 
             messages = [
-                SystemMessage("""Analyze the text in the provided image. Extract all readable content
-                                        and present it in a structured Markdown format that is clear, concise, 
-                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
-                                        code blocks) as necessary to represent the content effectively."""),
+                SystemMessage("You are a helpful study assistant."),
                 *[UserMessage(msg["content"]) if msg["role"] == "user"
                   else AssistantMessage(msg["content"])
                   for msg in st.session_state.chat_history]
