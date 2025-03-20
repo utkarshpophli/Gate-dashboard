@@ -30,7 +30,7 @@ from PIL import Image
 import pytesseract
 import PyPDF2
 from transformers import pipeline
-import ollama
+
 
 load_dotenv()
 
