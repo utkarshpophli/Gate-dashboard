@@ -30,9 +30,6 @@ from PIL import Image
 import pytesseract
 import PyPDF2
 from transformers import pipeline
-import base64
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.docstore.document import Document
 
 
 load_dotenv()
@@ -113,6 +110,7 @@ def create_header():
     # Read the logo image
     logo_path = Path("static/images/logos/app-logo.png")
     if logo_path.exists():
+        import base64
         with open(logo_path, "rb") as f:
             logo_data = base64.b64encode(f.read()).decode()
 
@@ -125,6 +123,7 @@ def set_favicon():
     """Set a custom favicon"""
     favicon_path = Path("static/images/logos/app-logo.png")
     if favicon_path.exists():
+        import base64
         with open(favicon_path, "rb") as f:
             favicon_data = base64.b64encode(f.read()).decode()
 
@@ -1507,8 +1506,6 @@ def rag_assistant_page():
                 del st.session_state['current_page']
             if 'extracted_text' in st.session_state:
                 del st.session_state['extracted_text']
-            if 'full_document_context' in st.session_state:
-                del st.session_state['full_document_context']
             st.rerun()
 
     st.markdown("#### Upload Resource (PDF)")
@@ -1536,12 +1533,10 @@ def rag_assistant_page():
         st.session_state.pdf_images = []
         st.session_state.pdf_name = ""
         st.session_state.current_page = 0
-        st.session_state.full_document_context = None
-        st.session_state.extracted_text = []
 
     if uploaded_file and st.button("Process PDF"):
         try:
-            with st.spinner("Converting PDF to images and extracting text..."):
+            with st.spinner("Converting PDF to images..."):
                 upload_folder = "uploads"
                 images_folder = os.path.join(upload_folder, "images")
                 os.makedirs(upload_folder, exist_ok=True)
@@ -1563,19 +1558,12 @@ def rag_assistant_page():
                     # Open the PDF document
                     pdf_document = pymupdf.open(file_path)
                     image_paths = []
-                    extracted_text_list = []
                     
                     # Get the base name of the PDF file (without extension)
                     base_name = os.path.splitext(uploaded_file.name)[0]
                     
-                    progress_bar = st.progress(0)
-                    
                     # Process each page
                     for page_number in range(len(pdf_document)):
-                        # Update progress
-                        progress = (page_number + 1) / len(pdf_document)
-                        progress_bar.progress(progress, text=f"Processing page {page_number+1}/{len(pdf_document)}")
-                        
                         # Get the page
                         page = pdf_document[page_number]
                         
@@ -1587,54 +1575,15 @@ def rag_assistant_page():
                         image_path = os.path.join(images_folder, f"{base_name}_page_{page_number+1}.jpg")
                         pixmap.save(image_path)
                         image_paths.append(image_path)
-                        
-                        # Extract text from the page
-                        page_text = page.get_text()
-                        extracted_text_list.append({
-                            "page_number": page_number + 1,
-                            "text": page_text
-                        })
-                        
+                    
                     # Close the PDF document
                     pdf_document.close()
-                    
-                    # Create full document context
-                    full_text = "\n\n".join([f"Page {item['page_number']}: {item['text']}" for item in extracted_text_list])
-                    
-                    # Process with OCR if text extraction didn't yield much
-                    if len(full_text.strip()) < 100:
-                        st.info("Limited text found in PDF. Applying OCR to extract more text...")
-                        reader = easyocr.Reader(['en'])
-                        extracted_text_list = []
-                        
-                        for i, image_path in enumerate(image_paths):
-                            progress_bar.progress((i + 1) / len(image_paths), text=f"OCR processing page {i+1}/{len(image_paths)}")
-                            result = reader.readtext(image_path)
-                            page_text = " ".join([text for _, text, _ in result])
-                            extracted_text_list.append({
-                                "page_number": i + 1,
-                                "text": page_text
-                            })
-                        
-                        full_text = "\n\n".join([f"Page {item['page_number']}: {item['text']}" for item in extracted_text_list])
-                    
-                    # Use text splitter to create document chunks
-                    text_splitter = RecursiveCharacterTextSplitter(
-                        chunk_size=1000,
-                        chunk_overlap=200,
-                        length_function=len
-                    )
-                    
-                    documents = [Document(page_content=full_text, metadata={"source": uploaded_file.name})]
-                    document_chunks = text_splitter.split_documents(documents)
                     
                     if image_paths:
                         st.session_state.pdf_processed = True
                         st.session_state.pdf_images = image_paths
                         st.session_state.pdf_name = uploaded_file.name
                         st.session_state.current_page = 0
-                        st.session_state.extracted_text = extracted_text_list
-                        st.session_state.full_document_context = full_text
                         st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
                     else:
                         raise Exception("No images were generated")
@@ -1670,19 +1619,9 @@ def rag_assistant_page():
         current_image_path = st.session_state.pdf_images[st.session_state.current_page]
         with st.expander("View Current Page", expanded=True):
             st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
-        
-        # Display extracted text for the current page as a separate expander
-        if st.session_state.extracted_text and len(st.session_state.extracted_text) > st.session_state.current_page:
-            page_text = st.session_state.extracted_text[st.session_state.current_page]["text"]
-            with st.expander("View Extracted Text", expanded=False):
-                st.text(page_text)
 
     # Ask a question section
     st.markdown("### Ask a question about the content")
-    
-    # Add option to use full document context
-    use_full_context = st.checkbox("Use context from all pages (recommended for complete answers)", value=True)
-    
     user_query = st.text_input(
         "Enter your question about the PDF content:"
     )
@@ -1697,40 +1636,34 @@ def rag_assistant_page():
                     api_version="2024-12-01-preview"
                 )
 
-                # Read the current image 
+                # Read the current image
                 current_image_path = st.session_state.pdf_images[st.session_state.current_page]
+                
                 with open(current_image_path, "rb") as img_file:
+                    import base64
                     image_data = base64.b64encode(img_file.read()).decode('utf-8')
 
-                # Create system message with context
-                context_prefix = ""
-                if use_full_context and st.session_state.full_document_context:
-                    context_prefix = (
-                        "Here is the extracted text from the full document:\n\n" +
-                        st.session_state.full_document_context + 
-                        "\n\nUse this context to help answer the question, but also analyze the image."
+                # Create system message based on selected model
+                if selected_model == "Llama-3.2-90B-Vision-Instruct":
+                    system_message = SystemMessage(
+                        """You are an expert assistant for analyzing document content from images. 
+                        The user has uploaded a PDF that has been converted to images. 
+                        Please analyze all images and answer questions about the content accurately and helpfully. 
+                        Consider both the visual elements and textual content in your analysis."""
+
                     )
-                
-                system_prompt = f"""You are an expert assistant for analyzing document content from images. 
-                The user has uploaded a PDF that has been converted to images. 
-                Please analyze all images and answer questions about the content accurately and helpfully. 
-                Consider both the visual elements and textual content in your analysis.
-                
-                {context_prefix}
-                """
-                
-                system_message = SystemMessage(system_prompt)
-                
+                else:  # GPT-4o
+                    system_message = SystemMessage(
+                        """You are an expert assistant for analyzing document content from images. 
+                        The user has uploaded a PDF that has been converted to images. 
+                        Please analyze all images and answer questions about the content accurately and helpfully. 
+                        Consider both the visual elements and textual content in your analysis."""
+                    )
+
                 # Create user message with image and question
-                query_with_context = user_query
-                if use_full_context:
-                    query_with_context = f"Based on the content in the image and the full document context provided, please answer this question: {user_query}"
-                else:
-                    query_with_context = f"Based on the content in this image, please answer this question: {user_query}"
-                
                 user_message_with_image = UserMessage(
                     content=[
-                        TextContentItem(text=query_with_context),
+                        TextContentItem(text=f"Based on the content in this image, please answer this question: {user_query}"),
                         ImageContentItem(
                             image_url=ImageUrl(
                                 url=f"data:image/jpeg;base64,{image_data}",
