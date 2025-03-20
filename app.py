@@ -50,7 +50,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain.chains.question_answering import load_qa_chain
 from langchain.callbacks import get_openai_callback
-from langchain_community.llms import AzureOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 
 load_dotenv()
@@ -1547,17 +1547,18 @@ def create_rag_chain():
         HumanMessagePromptTemplate.from_template("{input}")
     ])
     
-    # Create the chain with Azure OpenAI
+    # Create the chain with OpenAI (using Azure endpoint)
+    llm = ChatOpenAI(
+        model_name="o3-mini",
+        temperature=0.7,
+        openai_api_key=st.session_state.token,
+        openai_api_base="https://models.inference.ai.azure.com",
+        openai_api_version="2024-12-01-preview",
+        openai_api_type="azure"
+    )
+    
     chain = ConversationChain(
-        llm=AzureOpenAI(
-            deployment_name="o3-mini",
-            model_name="o3-mini",
-            temperature=0.7,
-            max_tokens=1000,
-            api_key=st.session_state.token,
-            azure_endpoint="https://models.inference.ai.azure.com",
-            api_version="2024-12-01-preview"
-        ),
+        llm=llm,
         memory=memory,
         prompt=prompt,
         verbose=True
@@ -1568,16 +1569,19 @@ def create_rag_chain():
 def create_chat_chain():
     """Create a chat chain with memory and tools"""
     # Initialize memory with summary
+    from langchain_openai import ChatOpenAI
+    
+    llm = ChatOpenAI(
+        model_name="o3-mini",
+        temperature=0.7,
+        openai_api_key=st.session_state.token,
+        openai_api_base="https://models.inference.ai.azure.com",
+        openai_api_version="2024-12-01-preview",
+        openai_api_type="azure"
+    )
+    
     memory = ConversationSummaryMemory(
-        llm=AzureOpenAI(
-            deployment_name="o3-mini",
-            model_name="o3-mini",
-            temperature=0.7,
-            max_tokens=1000,
-            api_key=st.session_state.token,
-            azure_endpoint="https://models.inference.ai.azure.com",
-            api_version="2024-12-01-preview"
-        ),
+        llm=llm,
         memory_key="chat_history",
         return_messages=True
     )
@@ -1615,17 +1619,9 @@ def create_chat_chain():
         HumanMessagePromptTemplate.from_template("{input}")
     ])
     
-    # Create the chain with Azure OpenAI
+    # Create the chain with OpenAI (using Azure endpoint)
     chain = ConversationChain(
-        llm=AzureOpenAI(
-            deployment_name="o3-mini",
-            model_name="o3-mini",
-            temperature=0.7,
-            max_tokens=1000,
-            api_key=st.session_state.token,
-            azure_endpoint="https://models.inference.ai.azure.com",
-            api_version="2024-12-01-preview"
-        ),
+        llm=llm,
         memory=memory,
         prompt=prompt,
         verbose=True
@@ -1647,7 +1643,13 @@ def process_document_with_rag(file_path, chain):
     texts = text_splitter.split_documents(pages)
     
     # Create vector store
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=st.session_state.token,
+        openai_api_base="https://models.inference.ai.azure.com",
+        openai_api_version="2024-12-01-preview",
+        openai_api_type="azure"
+    )
+    
     vectorstore = FAISS.from_documents(texts, embeddings)
     
     # Create QA chain
