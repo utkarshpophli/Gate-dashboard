@@ -1776,7 +1776,10 @@ def chat_assistant_page():
             )
 
             messages = [
-                SystemMessage("You are a helpful study assistant."),
+                SystemMessage("""Analyze the text in the provided image. Extract all readable content
+                                        and present it in a structured Markdown format that is clear, concise, 
+                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
+                                        code blocks) as necessary to represent the content effectively."""),
                 *[UserMessage(msg["content"]) if msg["role"] == "user"
                   else AssistantMessage(msg["content"])
                   for msg in st.session_state.chat_history]
