@@ -15,3 +15,6 @@ transformers
 easyocr
 pdf2image>=1.16.3
 pymupdf>=1.23.0
+langchain
+faiss-cpu
+langchain_community

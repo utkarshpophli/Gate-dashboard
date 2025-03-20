@@ -30,6 +30,30 @@ from PIL import Image
 import pytesseract
 import PyPDF2
 from transformers import pipeline
+from langchain.chains import LLMChain, SequentialChain
+from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory
+from langchain.prompts import PromptTemplate
+from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
+from langchain.agents.format_scratchpad import format_log_to_str
+from langchain.agents.output_parsers import ReActSingleInputOutputParser
+from langchain.tools import Tool
+from langchain.utilities import PythonREPL
+from langchain.document_loaders import PyPDFLoader, TextLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.vectorstores import FAISS
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.chains.question_answering import load_qa_chain
+from langchain.chains import RetrievalQA
+from langchain.callbacks import get_openai_callback
+from langchain.llms import AzureOpenAI
+from langchain.chains import ConversationChain
+from langchain.chains.conversation.memory import ConversationBufferWindowMemory
+from langchain.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    SystemMessagePromptTemplate,
+    HumanMessagePromptTemplate
+)
 
 
 load_dotenv()
@@ -1483,29 +1507,178 @@ def get_and_verify_token():
                 return None
     return None
 
+def create_rag_chain():
+    """Create a RAG chain with memory and tools"""
+    # Initialize memory
+    memory = ConversationBufferWindowMemory(
+        k=5,
+        memory_key="chat_history",
+        return_messages=True
+    )
+    
+    # Create tools
+    tools = [
+        Tool(
+            name="Python REPL",
+            func=PythonREPL().run,
+            description="Useful for running Python code and calculations"
+        ),
+        Tool(
+            name="Document Search",
+            func=lambda x: "Document search functionality",
+            description="Search through document content"
+        )
+    ]
+    
+    # Create prompt template with chain of thought
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template(
+            """You are an expert assistant for analyzing document content. 
+            Use chain of thought reasoning to break down complex questions.
+            Consider the following steps:
+            1. Understand the question and context
+            2. Break down the problem into smaller parts
+            3. Analyze each part systematically
+            4. Synthesize the information
+            5. Provide a clear, structured answer
+            
+            Previous conversation:
+            {chat_history}
+            """
+        ),
+        MessagesPlaceholder(variable_name="chat_history"),
+        HumanMessagePromptTemplate.from_template("{input}")
+    ])
+    
+    # Create the chain
+    chain = ConversationChain(
+        llm=AzureOpenAI(
+            deployment_name="gpt-4",
+            model_name="gpt-4",
+            temperature=0.7,
+            max_tokens=1000
+        ),
+        memory=memory,
+        prompt=prompt,
+        verbose=True
+    )
+    
+    return chain
+
+def create_chat_chain():
+    """Create a chat chain with memory and tools"""
+    # Initialize memory with summary
+    memory = ConversationSummaryMemory(
+        llm=AzureOpenAI(
+            deployment_name="gpt-4",
+            model_name="gpt-4",
+            temperature=0.7
+        ),
+        memory_key="chat_history",
+        return_messages=True
+    )
+    
+    # Create tools
+    tools = [
+        Tool(
+            name="Python REPL",
+            func=PythonREPL().run,
+            description="Useful for running Python code and calculations"
+        ),
+        Tool(
+            name="Document Search",
+            func=lambda x: "Document search functionality",
+            description="Search through document content"
+        )
+    ]
+    
+    # Create prompt template with chain of thought
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template(
+            """You are a helpful study assistant. Use chain of thought reasoning to provide detailed answers.
+            Consider the following steps:
+            1. Understand the user's question and context
+            2. Break down complex topics into simpler parts
+            3. Provide explanations with examples
+            4. Connect concepts to real-world applications
+            5. Summarize key points
+            
+            Previous conversation:
+            {chat_history}
+            """
+        ),
+        MessagesPlaceholder(variable_name="chat_history"),
+        HumanMessagePromptTemplate.from_template("{input}")
+    ])
+    
+    # Create the chain
+    chain = ConversationChain(
+        llm=AzureOpenAI(
+            deployment_name="gpt-4",
+            model_name="gpt-4",
+            temperature=0.7,
+            max_tokens=1000
+        ),
+        memory=memory,
+        prompt=prompt,
+        verbose=True
+    )
+    
+    return chain
+
+def process_document_with_rag(file_path, chain):
+    """Process a document using RAG chain"""
+    # Load and split the document
+    loader = PyPDFLoader(file_path)
+    pages = loader.load()
+    
+    # Split into chunks
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200
+    )
+    texts = text_splitter.split_documents(pages)
+    
+    # Create vector store
+    embeddings = OpenAIEmbeddings()
+    vectorstore = FAISS.from_documents(texts, embeddings)
+    
+    # Create QA chain
+    qa_chain = RetrievalQA.from_chain_type(
+        llm=chain.llm,
+        chain_type="stuff",
+        retriever=vectorstore.as_retriever()
+    )
+    
+    return qa_chain
+
 def rag_assistant_page():
     st.title("RAG Assistant")
-    st.subheader("Upload a PDF and ask questions about its visual content")
+    st.subheader("Upload a PDF and ask questions about its content with enhanced reasoning and memory")
 
     token = get_and_verify_token()
     if not token:
         st.warning("Please enter and verify your GitHub token above to proceed.")
         return
 
+    # Initialize session state for RAG chain
+    if "rag_chain" not in st.session_state:
+        st.session_state.rag_chain = create_rag_chain()
+    if "qa_chain" not in st.session_state:
+        st.session_state.qa_chain = None
+    if "document_processed" not in st.session_state:
+        st.session_state.document_processed = False
+
     # Add clear button to top right
     col1, col2 = st.columns([6,1])
     with col2:
         if st.button("Clear 🗑️"):
-            if 'pdf_processed' in st.session_state:
-                del st.session_state['pdf_processed']
-            if 'pdf_images' in st.session_state:
-                del st.session_state['pdf_images']
-            if 'pdf_name' in st.session_state:
-                del st.session_state['pdf_name']
-            if 'current_page' in st.session_state:
-                del st.session_state['current_page']
-            if 'extracted_text' in st.session_state:
-                del st.session_state['extracted_text']
+            if 'rag_chain' in st.session_state:
+                del st.session_state['rag_chain']
+            if 'qa_chain' in st.session_state:
+                del st.session_state['qa_chain']
+            if 'document_processed' in st.session_state:
+                del st.session_state['document_processed']
             st.rerun()
 
     st.markdown("#### Upload Resource (PDF)")
@@ -1528,96 +1701,24 @@ def rag_assistant_page():
         index=0  # Default to Llama model
     )
 
-    if "pdf_processed" not in st.session_state:
-        st.session_state.pdf_processed = False
-        st.session_state.pdf_images = []
-        st.session_state.pdf_name = ""
-        st.session_state.current_page = 0
-
     if uploaded_file and st.button("Process PDF"):
         try:
-            with st.spinner("Converting PDF to images..."):
+            with st.spinner("Processing PDF with enhanced RAG capabilities..."):
+                # Save the uploaded file
                 upload_folder = "uploads"
-                images_folder = os.path.join(upload_folder, "images")
                 os.makedirs(upload_folder, exist_ok=True)
-                os.makedirs(images_folder, exist_ok=True)
-
-                # Save the PDF file
                 file_path = os.path.join(upload_folder, uploaded_file.name)
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Use PyMuPDF for PDF to image conversion
-                try:
-                    import pymupdf
-                    st.info("Converting PDF using PyMuPDF...")
-                    
-                    # Calculate zoom factor for 300 DPI (default PDF DPI is 72)
-                    zoom_factor = 300 / 72
-                    
-                    # Open the PDF document
-                    pdf_document = pymupdf.open(file_path)
-                    image_paths = []
-                    
-                    # Get the base name of the PDF file (without extension)
-                    base_name = os.path.splitext(uploaded_file.name)[0]
-                    
-                    # Process each page
-                    for page_number in range(len(pdf_document)):
-                        # Get the page
-                        page = pdf_document[page_number]
-                        
-                        # Render page to an image (pixmap)
-                        matrix = pymupdf.Matrix(zoom_factor, zoom_factor)
-                        pixmap = page.get_pixmap(matrix=matrix)
-                        
-                        # Save the image
-                        image_path = os.path.join(images_folder, f"{base_name}_page_{page_number+1}.jpg")
-                        pixmap.save(image_path)
-                        image_paths.append(image_path)
-                    
-                    # Close the PDF document
-                    pdf_document.close()
-                    
-                    if image_paths:
-                        st.session_state.pdf_processed = True
-                        st.session_state.pdf_images = image_paths
-                        st.session_state.pdf_name = uploaded_file.name
-                        st.session_state.current_page = 0
-                        st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
-                    else:
-                        raise Exception("No images were generated")
-                        
-                except ImportError:
-                    st.error("PyMuPDF is not installed. Please install it using: pip install pymupdf")
-                    return
-                except Exception as e:
-                    st.error(f"Error processing PDF with PyMuPDF: {str(e)}")
-                    return
+                # Process the document with RAG
+                st.session_state.qa_chain = process_document_with_rag(file_path, st.session_state.rag_chain)
+                st.session_state.document_processed = True
+                st.success(f"PDF processed successfully with RAG: {uploaded_file.name}")
 
         except Exception as e:
-            st.error(f"Error processing PDF file: {str(e)}")
+            st.error(f"Error processing PDF: {str(e)}")
             st.exception(e)
-
-    if st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
-        # Display page navigation
-        col1, col2, col3 = st.columns([1, 3, 1])
-        with col1:
-            if st.button("Previous Page", disabled=st.session_state.current_page <= 0):
-                st.session_state.current_page = max(0, st.session_state.current_page - 1)
-                st.rerun()
-        
-        with col2:
-            st.write(f"Page {st.session_state.current_page + 1} of {len(st.session_state.pdf_images)}")
-        
-        with col3:
-            if st.button("Next Page", disabled=st.session_state.current_page >= len(st.session_state.pdf_images) - 1):
-                st.session_state.current_page = min(len(st.session_state.pdf_images) - 1, st.session_state.current_page + 1)
-                st.rerun()
-        
-        # Display the current page image
-        current_image_path = st.session_state.pdf_images[st.session_state.current_page]
-        st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
 
     # Ask a question section
     st.markdown("### Ask a question about the content")
@@ -1625,63 +1726,20 @@ def rag_assistant_page():
         "Enter your question about the PDF content:"
     )
 
-    if st.button("Ask Question") and user_query and st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
+    if st.button("Ask Question") and user_query and st.session_state.document_processed:
         try:
-            with st.spinner("Processing your question with Azure AI Vision..."):
-                # Initialize Azure AI client
-                client = ChatCompletionsClient(
-                    endpoint="https://models.inference.ai.azure.com",
-                    credential=AzureKeyCredential(token),
-                    api_version="2024-12-01-preview"
-                )
-
-                # Read the current image
-                current_image_path = st.session_state.pdf_images[st.session_state.current_page]
-                with open(current_image_path, "rb") as img_file:
-                    import base64
-                    image_data = base64.b64encode(img_file.read()).decode('utf-8')
-
-                # Create system message based on selected model
-                if selected_model == "Llama-3.2-90B-Vision-Instruct":
-                    system_message = SystemMessage(
-                        """You are an expert assistant for analyzing document content from images. 
-                        The user has uploaded a PDF that has been converted to images. 
-                        Please analyze all images and answer questions about the content accurately and helpfully. 
-                        Consider both the visual elements and textual content in your analysis."""
-
-                    )
-                else:  # GPT-4o
-                    system_message = SystemMessage(
-                        """You are an expert assistant for analyzing document content from images. 
-                        The user has uploaded a PDF that has been converted to images. 
-                        Please analyze all images and answer questions about the content accurately and helpfully. 
-                        Consider both the visual elements and textual content in your analysis."""
-                    )
-
-                # Create user message with image and question
-                user_message_with_image = UserMessage(
-                    content=[
-                        TextContentItem(f"Based on the content in this image, please answer this question: {user_query}"),
-                        ImageContentItem(
-                            image_url=ImageUrl(
-                                url=f"data:image/jpeg;base64,{image_data}",
-                                detail=ImageDetailLevel.HIGH
-                            )
-                        )
-                    ]
-                )
-
-                # Get response from Azure AI
-                response = client.complete(
-                    messages=[system_message, user_message_with_image],
-                    model=selected_model,
-                    temperature=0.7,
-                    max_tokens=1000
-                )
+            with st.spinner("Processing your question with enhanced reasoning..."):
+                # Get response from QA chain
+                response = st.session_state.qa_chain.run(user_query)
                 
-                # Display the response
+                # Display the response with chain of thought
                 st.markdown("### Response")
-                st.markdown(response.choices[0].message.content)
+                st.markdown(response)
+
+                # Show memory context
+                with st.expander("View Conversation Memory"):
+                    memory = st.session_state.rag_chain.memory
+                    st.write(memory.chat_memory.messages)
 
         except Exception as e:
             st.error(f"Error processing question: {str(e)}")
@@ -1689,27 +1747,41 @@ def rag_assistant_page():
 
     # Footer
     st.markdown("---")
-    st.markdown("Made with ❤️ using Azure AI Vision Models")
+    st.markdown("Made with ❤️ using LangChain and Azure AI Vision Models")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
-    st.subheader("Talk to your study data assistant using OpenAI o3-mini (GitHub-hosted)!")
+    st.subheader("Talk to your study data assistant with enhanced reasoning and memory!")
 
     token = get_and_verify_token()
     if not token:
         st.warning("Please enter and verify your GitHub token above to start chatting.")
         return
 
+    # Initialize chat chain in session state
+    if "chat_chain" not in st.session_state:
+        st.session_state.chat_chain = create_chat_chain()
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 
+    # Display chat history with memory context
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
+            if "thoughts" in msg:
+                with st.expander("View Reasoning Process"):
+                    st.write(msg["thoughts"])
+
+    # Add clear button
+    if st.button("Clear Chat History"):
+        st.session_state.chat_history = []
+        st.session_state.chat_chain = create_chat_chain()
+        st.rerun()
 
     user_input = st.chat_input("Enter your message:")
 
     if user_input:
+        # Add user message to chat history
         st.session_state.chat_history.append({
             "role": "user",
             "content": user_input
@@ -1719,37 +1791,33 @@ def chat_assistant_page():
             st.write(user_input)
 
         try:
-            client = ChatCompletionsClient(
-                endpoint="https://models.inference.ai.azure.com",
-                credential=AzureKeyCredential(token),
-                api_version="2024-12-01-preview"
-            )
+            with st.spinner("Thinking with enhanced reasoning..."):
+                # Get response from chat chain
+                response = st.session_state.chat_chain.predict(input=user_input)
+                
+                # Get the reasoning process from memory
+                memory = st.session_state.chat_chain.memory
+                thoughts = memory.chat_memory.messages[-1].content if memory.chat_memory.messages else ""
 
-            messages = [
-                SystemMessage("You are a helpful study assistant."),
-                *[UserMessage(msg["content"]) if msg["role"] == "user"
-                  else AssistantMessage(msg["content"])
-                  for msg in st.session_state.chat_history]
-            ]
-
-            with st.spinner("Thinking..."):
-                response = client.complete(
-                    messages=messages,
-                    model="o3-mini"
-                )
-
-                assistant_reply = response.choices[0].message.content
-
+                # Add assistant response to chat history
                 st.session_state.chat_history.append({
                     "role": "assistant",
-                    "content": assistant_reply
+                    "content": response,
+                    "thoughts": thoughts
                 })
 
                 with st.chat_message("assistant"):
-                    st.write(assistant_reply)
+                    st.write(response)
+                    with st.expander("View Reasoning Process"):
+                        st.write(thoughts)
 
         except Exception as e:
             st.error(f"Error: {str(e)}")
+            st.exception(e)
+
+    # Footer
+    st.markdown("---")
+    st.markdown("Made with ❤️ using LangChain and Azure AI")
 
 def main():
     load_css()
