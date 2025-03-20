@@ -1485,7 +1485,12 @@ def get_and_verify_token():
 
 def rag_assistant_page():
     st.title("RAG Assistant")
-    st.subheader("Upload a PDF and ask questions about its content using Gemma-3 Vision")
+    st.subheader("Upload a PDF and ask questions about its visual content")
+
+    token = get_and_verify_token()
+    if not token:
+        st.warning("Please enter and verify your GitHub token above to proceed.")
+        return
 
     # Add clear button to top right
     col1, col2 = st.columns([6,1])
@@ -1506,6 +1511,19 @@ def rag_assistant_page():
         "Upload a PDF file",
         type=["pdf"],
         key="rag_resource"
+    )
+
+    # Add model selection
+    model_options = {
+        "Llama-3.2-90B-Vision-Instruct": "Best for scanned documents with OCR capabilities",
+        "gpt-4o": "Good for text-based PDFs and general visual analysis"
+    }
+    
+    selected_model = st.selectbox(
+        "Select AI Model",
+        options=list(model_options.keys()),
+        format_func=lambda x: f"{x} ({model_options[x]})",
+        index=0  # Default to Llama model
     )
 
     if "pdf_processed" not in st.session_state:
@@ -1583,33 +1601,66 @@ def rag_assistant_page():
 
         # Add text extraction button
         if st.button("Extract Text 🔍", type="primary"):
-            with st.spinner("Processing image with Gemma-3 Vision..."):
+            with st.spinner("Processing image with Azure AI Vision..."):
                 try:
+                    # Initialize Azure AI client
+                    client = ChatCompletionsClient(
+                        endpoint="https://models.inference.ai.azure.com",
+                        credential=AzureKeyCredential(token),
+                        api_version="2024-12-01-preview"
+                    )
+
                     # Read the current image
                     with open(current_image_path, "rb") as img_file:
-                        image_data = img_file.read()
-                    
-                    # Use Ollama with Gemma-3 for text extraction
-                    response = ollama.chat(
-                        model='gemma3:12b',
-                        messages=[{
-                            'role': 'user',
-                            'content': """Analyze the text in the provided image. Extract all readable content
-                                        and present it in a structured Markdown format that is clear, concise, 
-                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
-                                        code blocks) as necessary to represent the content effectively.""",
-                            'images': [image_data]
-                        }]
+                        import base64
+                        image_data = base64.b64encode(img_file.read()).decode('utf-8')
+
+                    # Create system message based on selected model
+                    if selected_model == "Llama-3.2-90B-Vision-Instruct":
+                        system_message = SystemMessage(
+                            "You are an expert assistant for analyzing document content from images. "
+                            "The user has uploaded a scanned PDF that has been converted to images. "
+                            "Use your OCR capabilities to read and understand the text in the image. "
+                            "Pay attention to both text and visual elements in the document. "
+                            "Be precise and thorough in your analysis."
+                        )
+                    else:  # GPT-4o
+                        system_message = SystemMessage(
+                            "You are an expert assistant for analyzing document content from images. "
+                            "The user has uploaded a PDF that has been converted to images with text content. "
+                            "Please analyze the image content and answer questions about it accurately and helpfully. "
+                            "The PDF has been processed to extract text only, so focus on the textual content."
+                        )
+
+                    # Create user message with image
+                    user_message_with_image = UserMessage(
+                        content=[
+                            TextContentItem("Please analyze this image and extract all readable content in a structured format."),
+                            ImageContentItem(
+                                image_url=ImageUrl(
+                                    url=f"data:image/jpeg;base64,{image_data}",
+                                    detail=ImageDetailLevel.HIGH
+                                )
+                            )
+                        ]
                     )
-                    
+
+                    # Get response from Azure AI
+                    response = client.complete(
+                        messages=[system_message, user_message_with_image],
+                        model=selected_model,
+                        temperature=0.7,
+                        max_tokens=1000
+                    )
+
                     # Store the extracted text in session state
                     if 'extracted_text' not in st.session_state:
                         st.session_state.extracted_text = {}
-                    st.session_state.extracted_text[st.session_state.current_page] = response.message.content
+                    st.session_state.extracted_text[st.session_state.current_page] = response.choices[0].message.content
                     
                     # Display the extracted text
                     st.markdown("### Extracted Text")
-                    st.markdown(response.message.content)
+                    st.markdown(response.choices[0].message.content)
                     
                 except Exception as e:
                     st.error(f"Error processing image: {str(e)}")
@@ -1625,26 +1676,61 @@ def rag_assistant_page():
 
     if st.button("Ask Question") and user_query and st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
         try:
-            with st.spinner("Processing your question with Gemma-3 Vision..."):
+            with st.spinner("Processing your question with Azure AI Vision..."):
+                # Initialize Azure AI client
+                client = ChatCompletionsClient(
+                    endpoint="https://models.inference.ai.azure.com",
+                    credential=AzureKeyCredential(token),
+                    api_version="2024-12-01-preview"
+                )
+
                 # Read the current image
                 current_image_path = st.session_state.pdf_images[st.session_state.current_page]
                 with open(current_image_path, "rb") as img_file:
-                    image_data = img_file.read()
-                
-                # Use Ollama with Gemma-3 for question answering
-                response = ollama.chat(
-                    model='gemma3:12b',
-                    messages=[{
-                        'role': 'user',
-                        'content': f"""Based on the content in the image, please answer this question: {user_query}
-                                    Provide a clear and concise answer, citing specific information from the document if possible.""",
-                        'images': [image_data]
-                    }]
+                    import base64
+                    image_data = base64.b64encode(img_file.read()).decode('utf-8')
+
+                # Create system message based on selected model
+                if selected_model == "Llama-3.2-90B-Vision-Instruct":
+                    system_message = SystemMessage(
+                        "You are an expert assistant for analyzing document content from images. "
+                        "The user has uploaded a scanned PDF that has been converted to images. "
+                        "Use your OCR capabilities to read and understand the text in the image. "
+                        "Pay attention to both text and visual elements in the document. "
+                        "Be precise and thorough in your analysis."
+                    )
+                else:  # GPT-4o
+                    system_message = SystemMessage(
+                        "You are an expert assistant for analyzing document content from images. "
+                        "The user has uploaded a PDF that has been converted to images with text content. "
+                        "Please analyze the image content and answer questions about it accurately and helpfully. "
+                        "The PDF has been processed to extract text only, so focus on the textual content."
+                    )
+
+                # Create user message with image and question
+                user_message_with_image = UserMessage(
+                    content=[
+                        TextContentItem(f"Based on the content in this image, please answer this question: {user_query}"),
+                        ImageContentItem(
+                            image_url=ImageUrl(
+                                url=f"data:image/jpeg;base64,{image_data}",
+                                detail=ImageDetailLevel.HIGH
+                            )
+                        )
+                    ]
+                )
+
+                # Get response from Azure AI
+                response = client.complete(
+                    messages=[system_message, user_message_with_image],
+                    model=selected_model,
+                    temperature=0.7,
+                    max_tokens=1000
                 )
                 
                 # Display the response
                 st.markdown("### Response")
-                st.markdown(response.message.content)
+                st.markdown(response.choices[0].message.content)
 
         except Exception as e:
             st.error(f"Error processing question: {str(e)}")
@@ -1652,7 +1738,7 @@ def rag_assistant_page():
 
     # Footer
     st.markdown("---")
-    st.markdown("Made with ❤️ using Gemma-3 Vision Model")
+    st.markdown("Made with ❤️ using Azure AI Vision Models")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
