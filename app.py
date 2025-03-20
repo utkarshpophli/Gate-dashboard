@@ -1617,7 +1617,8 @@ def rag_assistant_page():
         
         # Display the current page image
         current_image_path = st.session_state.pdf_images[st.session_state.current_page]
-        st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
+        with st.expander("View Current Page", expanded=True):
+            st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
 
     # Ask a question section
     st.markdown("### Ask a question about the content")
@@ -1627,7 +1628,7 @@ def rag_assistant_page():
 
     if st.button("Ask Question") and user_query and st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
         try:
-            with st.spinner("Processing your question with Azure AI Vision..."):
+            with st.spinner("Processing your question"):
                 # Initialize Azure AI client
                 client = ChatCompletionsClient(
                     endpoint="https://models.inference.ai.azure.com",
