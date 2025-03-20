@@ -1485,7 +1485,7 @@ def get_and_verify_token():
 
 def rag_assistant_page():
     st.title("RAG Assistant")
-    st.subheader("Upload a PDF and ask questions about its visual content")
+    st.subheader("Upload a PDF and ask questions about its content")
 
     token = get_and_verify_token()
     if not token:
@@ -1502,10 +1502,6 @@ def rag_assistant_page():
                 del st.session_state['pdf_images']
             if 'pdf_name' in st.session_state:
                 del st.session_state['pdf_name']
-            if 'current_page' in st.session_state:
-                del st.session_state['current_page']
-            if 'extracted_text' in st.session_state:
-                del st.session_state['extracted_text']
             st.rerun()
 
     st.markdown("#### Upload Resource (PDF)")
@@ -1532,7 +1528,6 @@ def rag_assistant_page():
         st.session_state.pdf_processed = False
         st.session_state.pdf_images = []
         st.session_state.pdf_name = ""
-        st.session_state.current_page = 0
 
     if uploaded_file and st.button("Process PDF"):
         try:
@@ -1583,7 +1578,6 @@ def rag_assistant_page():
                         st.session_state.pdf_processed = True
                         st.session_state.pdf_images = image_paths
                         st.session_state.pdf_name = uploaded_file.name
-                        st.session_state.current_page = 0
                         st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
                     else:
                         raise Exception("No images were generated")
@@ -1598,26 +1592,6 @@ def rag_assistant_page():
         except Exception as e:
             st.error(f"Error processing PDF file: {str(e)}")
             st.exception(e)
-
-    if st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
-        # Display page navigation
-        col1, col2, col3 = st.columns([1, 3, 1])
-        with col1:
-            if st.button("Previous Page", disabled=st.session_state.current_page <= 0):
-                st.session_state.current_page = max(0, st.session_state.current_page - 1)
-                st.rerun()
-        
-        with col2:
-            st.write(f"Page {st.session_state.current_page + 1} of {len(st.session_state.pdf_images)}")
-        
-        with col3:
-            if st.button("Next Page", disabled=st.session_state.current_page >= len(st.session_state.pdf_images) - 1):
-                st.session_state.current_page = min(len(st.session_state.pdf_images) - 1, st.session_state.current_page + 1)
-                st.rerun()
-        
-        # Display the current page image
-        current_image_path = st.session_state.pdf_images[st.session_state.current_page]
-        st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
 
     # Ask a question section
     st.markdown("### Ask a question about the content")
@@ -1635,44 +1609,50 @@ def rag_assistant_page():
                     api_version="2024-12-01-preview"
                 )
 
-                # Read the current image
-                current_image_path = st.session_state.pdf_images[st.session_state.current_page]
-                with open(current_image_path, "rb") as img_file:
-                    import base64
-                    image_data = base64.b64encode(img_file.read()).decode('utf-8')
+                # Read all images and encode them
+                image_contents = []
+                for image_path in st.session_state.pdf_images:
+                    with open(image_path, "rb") as img_file:
+                        import base64
+                        image_data = base64.b64encode(img_file.read()).decode('utf-8')
+                        image_contents.append(image_data)
 
                 # Create system message based on selected model
                 if selected_model == "Llama-3.2-90B-Vision-Instruct":
                     system_message = SystemMessage(
-                        """Analyze the text in the provided image. Extract all readable content
-                        and present it in a structured Markdown format that is clear, concise, 
-                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
-                        code blocks) as necessary to represent the content effectively."""
+                        """You are an expert assistant for analyzing document content from images. 
+                        The user has uploaded a scanned PDF that has been converted to images. 
+                        Use your OCR capabilities to read and understand the text in all images. 
+                        Pay attention to both text and visual elements in the document. 
+                        Be precise and thorough in your analysis."""
                     )
                 else:  # GPT-4o
                     system_message = SystemMessage(
-                        """Analyze the text in the provided image. Extract all readable content
-                        and present it in a structured Markdown format that is clear, concise, 
-                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
-                        code blocks) as necessary to represent the content effectively."""
+                        """You are an expert assistant for analyzing document content from images. 
+                        The user has uploaded a PDF that has been converted to images. 
+                        Please analyze all images and answer questions about the content accurately and helpfully. 
+                        Consider both the visual elements and textual content in your analysis."""
                     )
 
-                # Create user message with image and question
-                user_message_with_image = UserMessage(
-                    content=[
-                        TextContentItem(text=f"Based on the content in this image, please answer this question: {user_query}"),
+                # Create user message with all images and question
+                content_items = [TextContentItem(text=f"Based on the content in these images, please answer this question: {user_query}")]
+                
+                # Add all images to the content
+                for image_data in image_contents:
+                    content_items.append(
                         ImageContentItem(
                             image_url=ImageUrl(
                                 url=f"data:image/jpeg;base64,{image_data}",
                                 detail=ImageDetailLevel.HIGH
                             )
                         )
-                    ]
-                )
+                    )
+
+                user_message_with_images = UserMessage(content=content_items)
 
                 # Get response from Azure AI
                 response = client.complete(
-                    messages=[system_message, user_message_with_image],
+                    messages=[system_message, user_message_with_images],
                     model=selected_model,
                     temperature=0.7,
                     max_tokens=1000
