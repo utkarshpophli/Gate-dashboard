@@ -1661,7 +1661,7 @@ def rag_assistant_page():
                 # Create user message with image and question
                 user_message_with_image = UserMessage(
                     content=[
-                        TextContentItem(f"Based on the content in this image, please answer this question: {user_query}"),
+                        TextContentItem(text=f"Based on the content in this image, please answer this question: {user_query}"),
                         ImageContentItem(
                             image_url=ImageUrl(
                                 url=f"data:image/jpeg;base64,{image_data}",
@@ -1686,10 +1686,6 @@ def rag_assistant_page():
         except Exception as e:
             st.error(f"Error processing question: {str(e)}")
             st.exception(e)
-
-    # Footer
-    st.markdown("---")
-    st.markdown("Made with ❤️ using Azure AI Vision Models")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
