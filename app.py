@@ -1628,7 +1628,7 @@ def rag_assistant_page():
 
     if st.button("Ask Question") and user_query and st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
         try:
-            with st.spinner("Processing your question with Azure AI Vision..."):
+            with st.spinner("Processing your question"):
                 # Initialize Azure AI client
                 client = ChatCompletionsClient(
                     endpoint="https://models.inference.ai.azure.com",
@@ -1636,53 +1636,46 @@ def rag_assistant_page():
                     api_version="2024-12-01-preview"
                 )
 
-                # Read all images
-                image_data_list = []
-                max_pages = 1000  # Limit to 1000 pages to avoid overwhelming the API
-                for image_path in st.session_state.pdf_images[:max_pages]:
-                    with open(image_path, "rb") as img_file:
-                        import base64
-                        image_data = base64.b64encode(img_file.read()).decode('utf-8')
-                        image_data_list.append(image_data)
+                # Read the current image
+                current_image_path = st.session_state.pdf_images[st.session_state.current_page]
                 
-                total_pages = len(st.session_state.pdf_images)
-                if total_pages > max_pages:
-                    st.warning(f"PDF has {total_pages} pages, but only the first {max_pages} will be processed to avoid overwhelming the API.")
+                with open(current_image_path, "rb") as img_file:
+                    import base64
+                    image_data = base64.b64encode(img_file.read()).decode('utf-8')
 
                 # Create system message based on selected model
                 if selected_model == "Llama-3.2-90B-Vision-Instruct":
                     system_message = SystemMessage(
-                        f"""You are an expert assistant for analyzing document content from images. 
-                        The user has uploaded a PDF with {len(image_data_list)} pages that has been converted to images.
-                        You are receiving ALL pages of the document at once.
-                        Please analyze ALL provided images collectively and answer questions about the entire document accurately.
-                        Consider both the visual elements and textual content across all pages in your analysis."""
+                        """You are an expert assistant for analyzing document content from images. 
+                        The user has uploaded a PDF that has been converted to images. 
+                        Please analyze all images and answer questions about the content accurately and helpfully. 
+                        Consider both the visual elements and textual content in your analysis."""
+
                     )
                 else:  # GPT-4o
                     system_message = SystemMessage(
-                        f"""You are an expert assistant for analyzing document content from images. 
-                        The user has uploaded a PDF with {len(image_data_list)} pages that has been converted to images.
-                        You are receiving ALL pages of the document at once.
-                        Please analyze ALL provided images collectively and answer questions about the entire document accurately.
-                        Consider both the visual elements and textual content across all pages in your analysis."""
+                        """You are an expert assistant for analyzing document content from images. 
+                        The user has uploaded a PDF that has been converted to images. 
+                        Please analyze all images and answer questions about the content accurately and helpfully. 
+                        Consider both the visual elements and textual content in your analysis."""
                     )
 
-                # Create user message with images and question
-                user_message_with_images = UserMessage(
+                # Create user message with image and question
+                user_message_with_image = UserMessage(
                     content=[
-                        TextContentItem(text=f"Based on the content in these images, please answer this question: {user_query}"),
-                        *[ImageContentItem(
+                        TextContentItem(text=f"Based on the content in this image, please answer this question: {user_query}"),
+                        ImageContentItem(
                             image_url=ImageUrl(
                                 url=f"data:image/jpeg;base64,{image_data}",
                                 detail=ImageDetailLevel.HIGH
                             )
-                        ) for image_data in image_data_list]
+                        )
                     ]
                 )
 
                 # Get response from Azure AI
                 response = client.complete(
-                    messages=[system_message, user_message_with_images],
+                    messages=[system_message, user_message_with_image],
                     model=selected_model,
                     temperature=0.7
                 )
