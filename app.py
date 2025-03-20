@@ -1545,35 +1545,130 @@ def rag_assistant_page():
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Process PDF to images using pdf2image
+                # Try multiple methods to convert PDF to images
+                image_paths = []
+                
+                # Method 1: Try using PyMuPDF (fitz) if available
                 try:
-                    from pdf2image import convert_from_path
+                    import fitz  # PyMuPDF
+                    st.info("Converting PDF using PyMuPDF...")
                     
-                    st.info("Converting PDF pages to high-quality images...")
-                    
-                    # Convert PDF pages to images at higher DPI for better OCR
-                    images = convert_from_path(file_path, dpi=300)
-                    
-                    # Save images and store their paths
-                    image_paths = []
-                    for i, image in enumerate(images):
-                        image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
-                        image.save(image_path, "JPEG", quality=95)
+                    pdf_document = fitz.open(file_path)
+                    for page_num in range(len(pdf_document)):
+                        page = pdf_document.load_page(page_num)
+                        pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72))  # 300 DPI
+                        image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{page_num+1}.jpg")
+                        pix.save(image_path)
                         image_paths.append(image_path)
                     
-                    if image_paths:
-                        st.session_state.pdf_processed = True
-                        st.session_state.pdf_images = image_paths
-                        st.session_state.pdf_name = uploaded_file.name
-                        st.session_state.current_page = 0
-                        st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
-                    else:
-                        raise Exception("No images were generated")
+                    pdf_document.close()
+                except ImportError:
+                    st.warning("PyMuPDF not available, trying alternative method...")
+                    pass
+                
+                # Method 2: Try using pdf2image (might not work on Streamlit Cloud due to poppler dependency)
+                if not image_paths:
+                    try:
+                        from pdf2image import convert_from_path
+                        st.info("Converting PDF pages using pdf2image...")
                         
-                except Exception as processing_error:
-                    st.error(f"PDF processing failed: {str(processing_error)}")
-                    st.error("Please try a different PDF file.")
-                    return
+                        images = convert_from_path(file_path, dpi=300)
+                        for i, image in enumerate(images):
+                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
+                            image.save(image_path, "JPEG", quality=95)
+                            image_paths.append(image_path)
+                    except Exception as pdf2image_error:
+                        st.warning(f"PDF2Image method failed: {str(pdf2image_error)}. Trying final method...")
+                        pass
+                
+                # Method 3: Fallback to PyPDF2 + PIL for text-based rendering (works on Streamlit Cloud)
+                if not image_paths:
+                    try:
+                        from PIL import Image, ImageDraw, ImageFont
+                        import PyPDF2
+                        
+                        st.info("Converting PDF using PyPDF2 and PIL (fallback method)...")
+                        
+                        with open(file_path, "rb") as pdf_file:
+                            pdf_reader = PyPDF2.PdfReader(pdf_file)
+                            for i, page in enumerate(pdf_reader.pages):
+                                # Create a blank image with text
+                                img = Image.new('RGB', (1700, 2200), color='white')
+                                d = ImageDraw.Draw(img)
+                                
+                                # Try to get a font, use default if not available
+                                try:
+                                    font = ImageFont.truetype("arial.ttf", 24)
+                                except IOError:
+                                    font = ImageFont.load_default()
+                                
+                                # Extract text and add to image
+                                text = page.extract_text()
+                                
+                                # Split text into lines and draw with proper wrapping
+                                y_position = 40
+                                x_position = 40
+                                max_width = 1620
+                                
+                                # Add page number at the top
+                                d.text((x_position, y_position), f"Page {i+1}", fill=(0, 0, 0), font=font)
+                                y_position += 60
+                                
+                                # Process text in chunks
+                                words = text.split()
+                                line = ""
+                                for word in words:
+                                    test_line = line + " " + word if line else word
+                                    # Check if adding this word would make the line too long
+                                    line_length = d.textlength(test_line, font=font) if hasattr(d, "textlength") else len(test_line) * 8
+                                    if line_length <= max_width:
+                                        line = test_line
+                                    else:
+                                        # Draw the current line and start a new one
+                                        d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
+                                        y_position += 40
+                                        line = word
+                                        
+                                        # If we've reached the bottom of the page, create a new page
+                                        if y_position > 2100:
+                                            # Save current image
+                                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
+                                            img.save(image_path, quality=95)
+                                            image_paths.append(image_path)
+                                            
+                                            # Create a new image for continuation
+                                            img = Image.new('RGB', (1700, 2200), color='white')
+                                            d = ImageDraw.Draw(img)
+                                            y_position = 40
+                                            d.text((x_position, y_position), f"Page {i+1} (continued)", fill=(0, 0, 0), font=font)
+                                            y_position += 60
+                                
+                                # Draw the last line
+                                if line:
+                                    d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
+                                
+                                # Save the image
+                                image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
+                                img.save(image_path, quality=95)
+                                image_paths.append(image_path)
+                    except Exception as pil_error:
+                        st.error(f"All PDF conversion methods failed. Last error: {str(pil_error)}")
+                        return
+                
+                # Method 4: Direct PDF upload if all else fails
+                if not image_paths:
+                    st.warning("Could not convert PDF to images. Using the PDF directly (limited functionality).")
+                    # Just use the PDF file path as the only "image"
+                    image_paths = [file_path]
+                
+                if image_paths:
+                    st.session_state.pdf_processed = True
+                    st.session_state.pdf_images = image_paths
+                    st.session_state.pdf_name = uploaded_file.name
+                    st.session_state.current_page = 0
+                    st.success(f"PDF processed successfully: {uploaded_file.name} ({len(image_paths)} pages)")
+                else:
+                    raise Exception("No images were generated by any method")
 
         except Exception as e:
             st.error(f"Error processing PDF file: {str(e)}")
