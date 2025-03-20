@@ -39,11 +39,11 @@ from langchain.prompts import (
     SystemMessagePromptTemplate,
     HumanMessagePromptTemplate
 )
-from langchain.agents import Tool, AgentExecutor, LLMSingleActionAgent
+from langchain.agents import AgentExecutor, LLMSingleActionAgent
 from langchain.agents.format_scratchpad import format_log_to_str
 from langchain.agents.output_parsers import ReActSingleInputOutputParser
-from langchain_community.tools import Tool
-from langchain_community.utilities import PythonREPL
+from langchain_core.tools import Tool
+from langchain_experimental.utilities import PythonREPL
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
