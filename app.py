@@ -1504,6 +1504,8 @@ def rag_assistant_page():
                 del st.session_state['pdf_name']
             if 'current_page' in st.session_state:
                 del st.session_state['current_page']
+            if 'extracted_text' in st.session_state:
+                del st.session_state['extracted_text']
             st.rerun()
 
     st.markdown("#### Upload Resource (PDF)")
@@ -1617,77 +1619,8 @@ def rag_assistant_page():
         current_image_path = st.session_state.pdf_images[st.session_state.current_page]
         st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
 
-        # Add text extraction button
-        if st.button("Extract Text 🔍", type="primary"):
-            with st.spinner("Processing image with Azure AI Vision..."):
-                try:
-                    # Initialize Azure AI client
-                    client = ChatCompletionsClient(
-                        endpoint="https://models.inference.ai.azure.com",
-                        credential=AzureKeyCredential(token),
-                        api_version="2024-12-01-preview"
-                    )
-
-                    # Read the current image
-                    with open(current_image_path, "rb") as img_file:
-                        import base64
-                        image_data = base64.b64encode(img_file.read()).decode('utf-8')
-
-                    # Create system message based on selected model
-                    if selected_model == "Llama-3.2-90B-Vision-Instruct":
-                        system_message = SystemMessage(
-                            "You are an expert assistant for analyzing document content from images. "
-                            "The user has uploaded a scanned PDF that has been converted to images. "
-                            "Use your OCR capabilities to read and understand the text in the image. "
-                            "Pay attention to both text and visual elements in the document. "
-                            "Be precise and thorough in your analysis."
-                        )
-                    else:  # GPT-4o
-                        system_message = SystemMessage(
-                            "You are an expert assistant for analyzing document content from images. "
-                            "The user has uploaded a PDF that has been converted to images with text content. "
-                            "Please analyze the image content and answer questions about it accurately and helpfully. "
-                            "The PDF has been processed to extract text only, so focus on the textual content."
-                        )
-
-                    # Create user message with image
-                    user_message_with_image = UserMessage(
-                        content=[
-                            TextContentItem("Please analyze this image and extract all readable content in a structured format."),
-                            ImageContentItem(
-                                image_url=ImageUrl(
-                                    url=f"data:image/jpeg;base64,{image_data}",
-                                    detail=ImageDetailLevel.HIGH
-                                )
-                            )
-                        ]
-                    )
-
-                    # Get response from Azure AI
-                    response = client.complete(
-                        messages=[system_message, user_message_with_image],
-                        model=selected_model,
-                        temperature=0.7,
-                        max_tokens=1000
-                    )
-
-                    # Store the extracted text in session state
-                    if 'extracted_text' not in st.session_state:
-                        st.session_state.extracted_text = {}
-                    st.session_state.extracted_text[st.session_state.current_page] = response.choices[0].message.content
-                    
-                    # Display the extracted text
-                    st.markdown("### Extracted Text")
-                    st.markdown(response.choices[0].message.content)
-                    
-                except Exception as e:
-                    st.error(f"Error processing image: {str(e)}")
-
-        # Display previously extracted text if available
-        if 'extracted_text' in st.session_state and st.session_state.current_page in st.session_state.extracted_text:
-            st.markdown("### Previously Extracted Text")
-            st.markdown(st.session_state.extracted_text[st.session_state.current_page])
-
+    # Ask a question section
+    st.markdown("### Ask a question about the content")
     user_query = st.text_input(
         "Enter your question about the PDF content:"
     )
@@ -1711,18 +1644,17 @@ def rag_assistant_page():
                 # Create system message based on selected model
                 if selected_model == "Llama-3.2-90B-Vision-Instruct":
                     system_message = SystemMessage(
-                        "You are an expert assistant for analyzing document content from images. "
-                        "The user has uploaded a scanned PDF that has been converted to images. "
-                        "Use your OCR capabilities to read and understand the text in the image. "
-                        "Pay attention to both text and visual elements in the document. "
-                        "Be precise and thorough in your analysis."
+                        """Analyze the text in the provided image. Extract all readable content
+                        and present it in a structured Markdown format that is clear, concise, 
+                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
+                        code blocks) as necessary to represent the content effectively."""
                     )
                 else:  # GPT-4o
                     system_message = SystemMessage(
-                        "You are an expert assistant for analyzing document content from images. "
-                        "The user has uploaded a PDF that has been converted to images with text content. "
-                        "Please analyze the image content and answer questions about it accurately and helpfully. "
-                        "The PDF has been processed to extract text only, so focus on the textual content."
+                        """Analyze the text in the provided image. Extract all readable content
+                        and present it in a structured Markdown format that is clear, concise, 
+                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
+                        code blocks) as necessary to represent the content effectively."""
                     )
 
                 # Create user message with image and question
