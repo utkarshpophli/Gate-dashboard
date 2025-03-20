@@ -30,6 +30,7 @@ from PIL import Image
 import pytesseract
 import PyPDF2
 from transformers import pipeline
+import ollama
 
 load_dotenv()
 
@@ -1484,31 +1485,27 @@ def get_and_verify_token():
 
 def rag_assistant_page():
     st.title("RAG Assistant")
-    st.subheader("Upload a PDF and ask questions about its visual content")
+    st.subheader("Upload a PDF and ask questions about its content using Gemma-3 Vision")
 
-    token = get_and_verify_token()
-    if not token:
-        st.warning("Please enter and verify your GitHub token above to proceed.")
-        return
+    # Add clear button to top right
+    col1, col2 = st.columns([6,1])
+    with col2:
+        if st.button("Clear 🗑️"):
+            if 'pdf_processed' in st.session_state:
+                del st.session_state['pdf_processed']
+            if 'pdf_images' in st.session_state:
+                del st.session_state['pdf_images']
+            if 'pdf_name' in st.session_state:
+                del st.session_state['pdf_name']
+            if 'current_page' in st.session_state:
+                del st.session_state['current_page']
+            st.rerun()
 
     st.markdown("#### Upload Resource (PDF)")
     uploaded_file = st.file_uploader(
         "Upload a PDF file",
         type=["pdf"],
         key="rag_resource"
-    )
-
-    # Add model selection
-    model_options = {
-        "Llama-3.2-90B-Vision-Instruct": "Best for scanned documents with OCR capabilities",
-        "gpt-4o": "Good for text-based PDFs and general visual analysis"
-    }
-    
-    selected_model = st.selectbox(
-        "Select AI Model",
-        options=list(model_options.keys()),
-        format_func=lambda x: f"{x} ({model_options[x]})",
-        index=0  # Default to Llama model
     )
 
     if "pdf_processed" not in st.session_state:
@@ -1530,96 +1527,21 @@ def rag_assistant_page():
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                # Process PDF directly to images (better for scanned documents)
+                # Process PDF to images using pdf2image
                 try:
-                    import PyPDF2
-                    from PIL import Image, ImageDraw, ImageFont
-                    from io import BytesIO
+                    from pdf2image import convert_from_path
                     
-                    # For scanned PDFs, we'll use a higher resolution
-                    dpi = 300
+                    st.info("Converting PDF pages to high-quality images...")
+                    
+                    # Convert PDF pages to images at higher DPI for better OCR
+                    images = convert_from_path(file_path, dpi=300)
+                    
+                    # Save images and store their paths
                     image_paths = []
-                    
-                    # Try to use pdf2image if available (better quality for scanned docs)
-                    try:
-                        from pdf2image import convert_from_path
-                        
-                        st.info("Converting PDF pages to high-quality images...")
-                        
-                        # Convert PDF pages to images at higher DPI for better OCR
-                        images = convert_from_path(file_path, dpi=dpi)
-                        
-                        # Save images and store their paths
-                        for i, image in enumerate(images):
-                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
-                            image.save(image_path, "JPEG", quality=95)  # Higher quality for OCR
-                            image_paths.append(image_path)
-                            
-                    except Exception as pdf2image_error:
-                        # Fallback to PyPDF2 + PIL if pdf2image fails
-                        st.info("Using alternative method to process PDF...")
-                        
-                        with open(file_path, "rb") as pdf_file:
-                            pdf_reader = PyPDF2.PdfReader(pdf_file)
-                            for i, page in enumerate(pdf_reader.pages):
-                                # Create a blank image with text
-                                img = Image.new('RGB', (1700, 2200), color='white')  # Larger size for better quality
-                                d = ImageDraw.Draw(img)
-                                
-                                # Try to get a font, use default if not available
-                                try:
-                                    font = ImageFont.truetype("arial.ttf", 24)  # Larger font
-                                except IOError:
-                                    font = ImageFont.load_default()
-                                
-                                # Extract text and add to image
-                                text = page.extract_text()
-                                
-                                # Split text into lines and draw with proper wrapping
-                                y_position = 40
-                                x_position = 40
-                                max_width = 1620
-                                
-                                # Add page number at the top
-                                d.text((x_position, y_position), f"Page {i+1}", fill=(0, 0, 0), font=font)
-                                y_position += 60
-                                
-                                # Process text in chunks to avoid overwhelming the image
-                                words = text.split()
-                                line = ""
-                                for word in words:
-                                    test_line = line + " " + word if line else word
-                                    # Check if adding this word would make the line too long
-                                    if d.textlength(test_line, font=font) <= max_width:
-                                        line = test_line
-                                    else:
-                                        # Draw the current line and start a new one
-                                        d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
-                                        y_position += 40
-                                        line = word
-                                        
-                                        # If we've reached the bottom of the page, create a new page
-                                        if y_position > 2100:
-                                            # Save current image
-                                            image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
-                                            img.save(image_path, quality=95)
-                                            image_paths.append(image_path)
-                                            
-                                            # Create a new image for continuation
-                                            img = Image.new('RGB', (1700, 2200), color='white')
-                                            d = ImageDraw.Draw(img)
-                                            y_position = 40
-                                            d.text((x_position, y_position), f"Page {i+1} (continued)", fill=(0, 0, 0), font=font)
-                                            y_position += 60
-                                
-                                # Draw the last line
-                                if line:
-                                    d.text((x_position, y_position), line, fill=(0, 0, 0), font=font)
-                                
-                                # Save the image
-                                image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}_{len(image_paths)}.jpg")
-                                img.save(image_path, quality=95)
-                                image_paths.append(image_path)
+                    for i, image in enumerate(images):
+                        image_path = os.path.join(images_folder, f"{uploaded_file.name.split('.')[0]}_page_{i+1}.jpg")
+                        image.save(image_path, "JPEG", quality=95)
+                        image_paths.append(image_path)
                     
                     if image_paths:
                         st.session_state.pdf_processed = True
@@ -1659,86 +1581,78 @@ def rag_assistant_page():
         current_image_path = st.session_state.pdf_images[st.session_state.current_page]
         st.image(current_image_path, caption=f"Page {st.session_state.current_page + 1}", use_container_width=True)
 
+        # Add text extraction button
+        if st.button("Extract Text 🔍", type="primary"):
+            with st.spinner("Processing image with Gemma-3 Vision..."):
+                try:
+                    # Read the current image
+                    with open(current_image_path, "rb") as img_file:
+                        image_data = img_file.read()
+                    
+                    # Use Ollama with Gemma-3 for text extraction
+                    response = ollama.chat(
+                        model='gemma3:12b',
+                        messages=[{
+                            'role': 'user',
+                            'content': """Analyze the text in the provided image. Extract all readable content
+                                        and present it in a structured Markdown format that is clear, concise, 
+                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
+                                        code blocks) as necessary to represent the content effectively.""",
+                            'images': [image_data]
+                        }]
+                    )
+                    
+                    # Store the extracted text in session state
+                    if 'extracted_text' not in st.session_state:
+                        st.session_state.extracted_text = {}
+                    st.session_state.extracted_text[st.session_state.current_page] = response.message.content
+                    
+                    # Display the extracted text
+                    st.markdown("### Extracted Text")
+                    st.markdown(response.message.content)
+                    
+                except Exception as e:
+                    st.error(f"Error processing image: {str(e)}")
+
+        # Display previously extracted text if available
+        if 'extracted_text' in st.session_state and st.session_state.current_page in st.session_state.extracted_text:
+            st.markdown("### Previously Extracted Text")
+            st.markdown(st.session_state.extracted_text[st.session_state.current_page])
+
     user_query = st.text_input(
         "Enter your question about the PDF content:"
     )
 
-    if st.button("Generate Response") and user_query and st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
+    if st.button("Ask Question") and user_query and st.session_state.pdf_processed and len(st.session_state.pdf_images) > 0:
         try:
-            # Use Azure AI vision model
-            client = ChatCompletionsClient(
-                endpoint="https://models.inference.ai.azure.com",
-                credential=AzureKeyCredential(token),
-                api_version="2024-12-01-preview"
-            )
-
-            # Get the current image
-            current_image_path = st.session_state.pdf_images[st.session_state.current_page]
-            
-            # Read the image as base64
-            with open(current_image_path, "rb") as img_file:
-                import base64
-                image_data = base64.b64encode(img_file.read()).decode('utf-8')
-            
-            # Create system message based on selected model
-            if selected_model == "Llama-3.2-90B-Vision-Instruct":
-                system_message = SystemMessage(
-"""Analyze the text in the provided image. Extract all readable content
-                                        and present it in a structured Markdown format that is clear, concise, 
-                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
-                                        code blocks) as necessary to represent the content effectively."""
+            with st.spinner("Processing your question with Gemma-3 Vision..."):
+                # Read the current image
+                current_image_path = st.session_state.pdf_images[st.session_state.current_page]
+                with open(current_image_path, "rb") as img_file:
+                    image_data = img_file.read()
+                
+                # Use Ollama with Gemma-3 for question answering
+                response = ollama.chat(
+                    model='gemma3:12b',
+                    messages=[{
+                        'role': 'user',
+                        'content': f"""Based on the content in the image, please answer this question: {user_query}
+                                    Provide a clear and concise answer, citing specific information from the document if possible.""",
+                        'images': [image_data]
+                    }]
                 )
-            else:  # GPT-4o
-                system_message = SystemMessage(
-                   """Analyze the text in the provided image. Extract all readable content
-                                        and present it in a structured Markdown format that is clear, concise, 
-                                        and well-organized. Ensure proper formatting (e.g., headings, lists, or
-                                        code blocks) as necessary to represent the content effectively."""
-                )
-            
-            # Create user message with image
-            user_message_with_image = UserMessage(
-                content=[
-                    TextContentItem("Here is a page from the document. Please analyze it and answer my question."),
-                    ImageContentItem(
-                        image_url=ImageUrl(
-                            url=f"data:image/jpeg;base64,{image_data}",
-                            detail=ImageDetailLevel.HIGH
-                        )
-                    )
-                ]
-            )
-            
-            # Create user question message
-            question_message = UserMessage(content=user_query)
-
-            with st.spinner(f"Analyzing document content with {selected_model}..."):
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        # Use the selected model
-                        response = client.complete(
-                            messages=[system_message, user_message_with_image, question_message],
-                            model=selected_model,
-                            temperature=0.7,
-                            max_tokens=1000
-                        )
-
-                        rag_reply = response.choices[0].message.content
-                        st.markdown("### Response")
-                        st.markdown(rag_reply)
-                        break
-
-                    except Exception as e:
-                        if attempt < max_retries - 1:
-                            st.warning(f"Attempt {attempt + 1} failed. Retrying in 2 seconds...")
-                            time.sleep(2)
-                        else:
-                            st.error(f"Error generating response after {max_retries} attempts: {str(e)}")
+                
+                # Display the response
+                st.markdown("### Response")
+                st.markdown(response.message.content)
 
         except Exception as e:
-            st.error(f"Error in processing: {str(e)}")
+            st.error(f"Error processing question: {str(e)}")
             st.exception(e)
+
+    # Footer
+    st.markdown("---")
+    st.markdown("Made with ❤️ using Gemma-3 Vision Model")
 
 def chat_assistant_page():
     st.title("Chat Assistant")
